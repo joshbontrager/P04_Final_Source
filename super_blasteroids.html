@@ -1,0 +1,507 @@
+<html>
+<meta charset="UTF-8"/>
+
+<link rel="stylesheet" type="text/css" href="super_blasteroids.css">
+
+<title>Super Blasteroids</title>
+
+<body>
+<canvas id="c"></canvas>
+<div id="ui"><table>
+    <tr><td>Use arrow keys to move.</td></tr>
+    <tr><td>Hold spacebar to shoot.</td></tr>
+    <tr><td>Score <span id="scoreToWin"></span> points to win!</td></tr>
+    <tr><td>Score: <span id="scoreCounter"></span></td></tr>
+</table></div>
+<div id="win">You have won!</div>
+<div id="lose">Game over man, game over.</div>
+</body>
+
+<!-- include 3x3 matrix math library -->
+<script src="lib/2d-math.js"></script>
+
+<script type="notjs" id="2d-vertex-shader">
+attribute vec2 a_position;
+uniform mat3 u_matrix;
+
+void main()
+{
+    vec2 xy = (u_matrix * vec3(a_position, 1)).xy;
+    gl_Position = vec4(xy, 0, 1);
+}
+</script>
+
+<script type="notjs" id="2d-fragment-shader">
+precision mediump float;
+
+uniform vec4 u_color;
+
+void main()
+{
+    gl_FragColor = u_color;
+}
+</script>
+
+<script>
+    var canvas = document.getElementById("c");
+    var gl = canvas.getContext("webgl");
+
+    gl.enable( gl.BLEND );
+    gl.blendEquation( gl.FUNC_ADD );
+    gl.blendFunc( gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA );
+    
+    var vertexShaderSource   = document.getElementById("2d-vertex-shader").text;
+    var fragmentShaderSource = document.getElementById("2d-fragment-shader").text;
+    var vertexShader   = createShader(gl, gl.VERTEX_SHADER,   vertexShaderSource);
+    var fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+    var program = createProgram(gl, vertexShader, fragmentShader);
+    gl.useProgram(program);
+    
+    var resolutionUniformLocation = gl.getUniformLocation(program, "u_resolution");
+    var positionAttributeLocation = gl.getAttribLocation(program,  "a_position");
+    gl.enableVertexAttribArray(positionAttributeLocation);
+    
+    // arrow head
+    const shipShape =
+    [
+        -0.02, -0.02,
+         0.00, -0.01,
+         0.02, -0.02,
+         0.00,  0.02,
+        -0.02, -0.02
+    ];
+
+    // V
+    const bulletShape =
+    [
+        -0.01, -0.01,
+         0.00,  0.01,
+         0.01, -0.01
+    ];
+
+    const asteroidRadius = 0.1;
+    const shootCooldown = 0.05;
+    const shootVariance = 0.05;
+    const invulnerabilityPeriod = 2;
+    const scoreToWin = 1000;
+    const collisionGrace = 0.02;
+    const asteroidVertCount = 10;
+    
+    var divWin = document.getElementById("win");
+    var divLose = document.getElementById("lose");
+    var divScore = document.getElementById("scoreCounter");
+    
+    var prevTime = 0;
+    var timeSinceLastAsteroid = 0;
+    var difficulty = 1;
+    var invulnerableTimer = 0;
+    var timeSinceLastShot = 0;
+    var score = 0;
+    var up, down, left, right, shoot;
+    
+    var entities = [];
+    
+    //insert ship at 0th element
+    addEntity("ship", 0, 0, 0, 0, 0, 0, shipShape);
+
+    // update UI to reflect score to win
+    document.getElementById('scoreToWin').innerHTML = scoreToWin;
+    
+    document.onkeydown = function(event)
+    {
+        switch(event.keyCode)
+        {
+            case 38:
+                up = true;
+                break;
+            case 40:
+                down = true;
+                break;
+            case 37:
+                left = true;
+                break;
+            case 39:
+                right = true;
+                break;
+            case 32:
+                shoot = true;
+                break;
+        }
+    }
+
+    document.onkeyup = function(event)
+    {
+        switch(event.keyCode)
+        {
+            case 38:
+                up = false;
+                break;
+            case 40:
+                down = false;
+                break;
+            case 37:
+                left = false;
+                break;
+            case 39:
+                right = false;
+                break;
+            case 32:
+                shoot = false;
+                break;
+        }
+    }
+    
+    requestAnimationFrame(update);
+    
+    function update(currTime)
+    {
+        var deltaTime = (currTime - prevTime) * 0.001;
+        prevTime = currTime;
+        
+        resize(canvas);
+        gl.viewport((gl.canvas.width / 2) - gl.canvas.height / 2, 0, gl.canvas.height * (gl.canvas.height / gl.canvas.height), gl.canvas.height);
+        
+        // game gets harder as time goes on
+        difficulty += deltaTime * 0.2;
+
+        // update the score
+        if(score < scoreToWin)
+        {
+            divScore.innerHTML = score;
+        }
+        else
+        {
+            if(divWin.style.display != "block")
+            {
+                divWin.style.display = "block";
+                divScore.innerHTML = "You Win!";
+                //explode all the asteroids
+                for(i = 0; i < entities.length; i++)
+                {
+                    if(entities[i].Type == "asteroid")
+                    {
+                        entities[i].Life = 0;
+                    }
+                }
+            }
+        }
+        
+        //ship should always be the first element. if not, it got destroyed, so we lose
+        if(entities[0].Type != "ship")
+        {
+            divLose.style.display = "block";
+        }
+
+        else
+        {
+            // turn
+            if(left)
+            {
+                entities[0].Angle -= deltaTime * 5;
+            }
+            if(right)
+            {
+                entities[0].Angle += deltaTime * 5;
+            }
+            
+            // accelerate
+            if(up)
+            {
+                entities[0].VSpeed += Math.cos(entities[0].Angle) * deltaTime * 2.0;
+                entities[0].HSpeed += Math.sin(entities[0].Angle) * deltaTime * 2.0;
+            }
+            if(down)
+            {
+                entities[0].VSpeed -= Math.cos(entities[0].Angle) * deltaTime * 2.0;
+                entities[0].HSpeed -= Math.sin(entities[0].Angle) * deltaTime * 2.0;
+            }
+
+            //shoot
+            timeSinceLastShot += deltaTime;
+            if(shoot && timeSinceLastShot > shootCooldown)
+            {
+                var shootAngle = entities[0].Angle + Math.random() * shootVariance;
+                addEntity("bullet", entities[0].XPos, entities[0].YPos, shootAngle, entities[0].HSpeed + Math.sin(shootAngle) * 1, entities[0].VSpeed + Math.cos(shootAngle) * 1, 0, bulletShape);
+                timeSinceLastShot = 0;
+            }
+
+            //drag
+            entities[0].VSpeed += -entities[0].VSpeed * deltaTime * 1.5;
+            entities[0].HSpeed += -entities[0].HSpeed * deltaTime * 1.5;
+
+            //invulnerability frames
+            invulnerableTimer -= deltaTime;
+        }
+
+        //spawn an asteroid
+        timeSinceLastAsteroid += deltaTime;
+        //asteroids spawn more frequently as difficulty increases
+        //if the score is greater than scoreToWin, we've won; no more asteroids
+        var makeMore = (score < scoreToWin) && (entities[0].Type == "ship");
+        if(makeMore && timeSinceLastAsteroid > 5 - Math.min(difficulty * 0.3, 4)) //min spawn time is 5 - 4.5 = 0.5
+        {
+            var asteroidOffsetAngle = Math.random() * Math.PI * 2;
+            addEntity(
+                "asteroid",
+                entities[0].XPos + Math.sin(asteroidOffsetAngle) * 0.5,    //don't make asteroids too close to the player
+                entities[0].YPos + Math.cos(asteroidOffsetAngle) * 0.5,
+                asteroidOffsetAngle,
+                (Math.random() * 0.1 - 0.05) * difficulty * 0.4,  //asteroids get faster as time goes on
+                (Math.random() * 0.1 - 0.05) * difficulty * 0.4,
+                Math.random() * 0.1 - 0.05,
+                makeAsteroidShape()
+                );
+
+            timeSinceLastAsteroid = 0;
+        }
+
+        // update position and life for each entity
+        for(i = 0; i < entities.length; i++)
+        {
+            //add velocity to position
+            entities[i].XPos += entities[i].HSpeed * deltaTime;
+            entities[i].YPos += entities[i].VSpeed * deltaTime;
+
+            //wrap screen
+            if(entities[i].XPos >  1) entities[i].XPos -= 2;
+            if(entities[i].XPos < -1) entities[i].XPos += 2;
+            if(entities[i].YPos >  1) entities[i].YPos -= 2;
+            if(entities[i].YPos < -1) entities[i].YPos += 2;
+
+            //add angular velocity to angle
+            entities[i].Angle += entities[i].ASpeed;
+
+            //asteroids check collisions with other entities
+            if(entities[i].Type == "asteroid")
+            {
+                for(j = 0; j < entities.length; j++)
+                {
+                    if(i == j) continue;
+                    
+                    //bullet hits the asteroid
+                    if(entities[j].Type == "bullet" && testCollision(entities[i], entities[j], asteroidRadius+0.02))
+                    {
+                        entities[j].Life = 0;  //bullet is destroyed
+                        entities[i].Life -= 10;    //and damages asteroid
+                    }
+
+                    //ship hits the asteroid
+                    else if(entities[j].Type == "ship" && testCollision(entities[i], entities[j], asteroidRadius+0.00))
+                    {
+                        //ship bounces away
+                        var difference = vectorLength(entities[i].XPos, entities[i].YPos, entities[j].XPos, entities[j].YPos);
+                        entities[j].HSpeed = (entities[j].XPos - entities[i].XPos) / difference * 0.2;
+                        entities[j].VSpeed = (entities[j].YPos - entities[i].YPos) / difference * 0.2;
+
+                        //ship gets damaged
+                        if(invulnerableTimer <= 0)
+                        {
+                            entities[j].Life -= 20;
+                            invulnerableTimer = invulnerabilityPeriod;
+                        }
+                    }
+                    //asteroid hits another asteroid
+                    /*else if(entities[j].Type == "asteroid" && testCollision(entities[i], entities[j], 2*asteroidRadius))
+                    {
+                        entities[i].HSpeed = entities[i].XPos - entities[j].XPos;
+                        entities[i].VSpeed = entities[i].YPos - entities[j].YPos;
+                        entities[j].HSpeed = entities[j].XPos - entities[i].XPos;
+                        entities[j].VSpeed = entities[j].YPos - entities[i].YPos;
+                    }*/
+                }
+            }
+
+            //bullets live for only one second - all entities have 100 health
+            if(entities[i].Type == "bullet" || entities[i].Type == "explode")
+            {
+                entities[i].Life -= deltaTime * 100;
+            }
+        }
+
+        // delete dead entities
+        // note: do this in reverse order!
+        for(i = entities.length - 1; i >= 0; i--)
+        {
+            if(entities[i].Life > 0) continue;
+            
+            //this entity has been killed; remove it
+            
+            // asteroids explode
+            if(entities[i].Type == "asteroid")
+            {
+                score += 10;
+                addExplosionEntities(entities[i], 5, "bullet"); // asteroid fragments act like bullets
+            }
+            
+            // ship explodes
+            else if(entities[i].Type == "ship")
+            {
+                addExplosionEntities(entities[i], 20, "explode"); // ship fragments do not act like bullets
+            }
+
+            removeEntity(i);
+        }
+        
+        //space!
+        gl.clearColor(0, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        // draw all entities
+        for(i = 0; i < entities.length; i++)
+        {
+            //draw the entity
+            entities[i].Color = [1, entities[i].Life / 100, entities[i].Life / 100, 1];    //entity turns red as it is damaged
+            if(entities[i].Type == "ship" && invulnerableTimer >= 0 && Math.floor(invulnerableTimer * 10) % 2)
+            {
+                entities[i].Color[3] = 0.25;
+            }
+            drawPolyLine(entities[i]);
+        }
+
+        requestAnimationFrame(update);
+    }
+    
+    
+    ///////////////////////////////////////////////////
+    // helper functions
+
+    function createShader(gl, type, source)
+    {
+        var shader = gl.createShader(type);
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+        if(gl.getShaderParameter(shader, gl.COMPILE_STATUS))
+        {
+            return shader;
+        }
+        var msg = gl.getShaderInfoLog(shader);
+        alert('Shader Compile Error:\n' + msg);
+        gl.deleteShader(shader);
+        throw new Error('Shader compile error');
+    }
+
+    function createProgram(gl, vertexShader, fragmentShader)
+    {
+        var program = gl.createProgram();
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        gl.linkProgram(program);
+        if(gl.getProgramParameter(program, gl.LINK_STATUS))
+        {
+            return program;
+        }
+        var msg = gl.getProgramInfoLog(program);
+        alert('Shader Linker Error:\n' + msg);
+        gl.deleteProgram(program);
+        throw new Error('Shader linker error');
+    }
+
+    function vectorLength(x1, y1, x2, y2)
+    {
+        return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+    }
+
+    function resize(canvas) {
+        // Lookup the size the browser is displaying the canvas.
+        var displayWidth  = canvas.clientWidth;
+        var displayHeight = canvas.clientHeight;
+        // Check if the canvas is not the same size.
+        if (canvas.width  != displayWidth || canvas.height != displayHeight) {
+            // Make the canvas the same size
+            canvas.width  = displayWidth;
+            canvas.height = displayHeight;
+        }
+    }
+    function addExplosionEntities(entity, count, type)
+    {
+        var theta = Math.random();
+        var increment = (Math.PI * 2) / count;
+        for(j = 0; j < count; j++)
+        {
+            theta += increment;
+            addEntity(type, entity.XPos, entity.YPos, theta, entity.HSpeed + Math.sin(theta) * 0.5, entity.VSpeed + Math.cos(theta) * 0.5, 0, bulletShape);
+        }
+    }
+
+    function addEntity(type, xPos, yPos, angle, hSpeed, vSpeed, aSpeed, shape)
+    {
+        var positionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(shape), gl.STATIC_DRAW);
+        
+        entities.push({
+            Type: type,
+            XPos: xPos,
+            YPos: yPos,
+            Angle: angle,
+            HSpeed: hSpeed,
+            VSpeed: vSpeed,
+            ASpeed: aSpeed,
+            Life: 100,
+            Buffer: positionBuffer,
+            BufferLength: shape.length,
+            Color: [1, 1, 1, 1],
+        });
+    }
+
+    function removeEntity(index)
+    {
+        gl.deleteBuffer(entities[index].Buffer);
+        entities.splice(index, 1);
+    }
+
+    function testCollision(entity0, entity1, collideRadius)
+    {
+        collideRadius -= collisionGrace;
+        var xd = entity0.XPos - entity1.XPos;
+        var yd = entity0.YPos - entity1.YPos;
+        return (xd*xd + yd*yd) < collideRadius*collideRadius;
+    }
+
+    function makeAsteroidShape()
+    {
+        var shape = [];
+
+        var theta = 0, increment = (Math.PI * 2) / asteroidVertCount;
+        for(i = 0; i < asteroidVertCount; i++)
+        {
+            //vertices must be in range of 0.5-1.0 of asteroid radius
+            shape.push(Math.sin(theta) * (Math.random() * 0.5 + 0.5) * asteroidRadius);
+            shape.push(Math.cos(theta) * (Math.random() * 0.5 + 0.5) * asteroidRadius);
+            theta += increment;
+        }
+
+        //complete shape by adding a line from last to first verts
+        shape.push(shape[0]); // x
+        shape.push(shape[1]); // y
+
+        return shape;
+    }
+
+    function drawPolyLine(entity)
+    {
+        //calculate transform
+        var transform = m3.identity();
+        transform = m3.translate(transform, entity.XPos, entity.YPos);
+        transform = m3.rotate(transform, entity.Angle);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, entity.Buffer);
+        var size = 2;
+        var type = gl.FLOAT;
+        var normalize = false;
+        var stride = 0;
+        var offset = 0;
+        gl.vertexAttribPointer(positionAttributeLocation, size, type, normalize, stride, offset);
+        
+        gl.uniformMatrix3fv(gl.getUniformLocation(program, "u_matrix"), false, transform);
+        gl.uniform4fv(gl.getUniformLocation(program, "u_color"), entity.Color);
+
+        //draw lines
+        var primitiveType = gl.LINE_STRIP;
+        var offset = 0;
+        var count = entity.BufferLength / 2; //two values for each line
+        gl.drawArrays(primitiveType, offset, count);
+    }
+    
+</script>
+</html>

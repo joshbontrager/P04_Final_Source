@@ -1,0 +1,1290 @@
+<html>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Cube Walking - Light Probe Edition</title>
+
+<link href="https://fonts.googleapis.com/css?family=Ubuntu" rel="stylesheet">
+<link rel="stylesheet" type="text/css" href="cube_walking.css">
+
+<script type="notjs" id="map0">
+XXXXXXXXXXXzZXXXXXXX
+X                LX
+X L XXXXXXXXXX-XX X
+X   XL    X    LX X
+X L XXX X O  t  X X
+X   X   X       X X
+X L OO  XLo ^   X X
+XXXXLlXXX-XXXXXXX X
+xL                X
+XXXXXXXXXXXXXXX-XXX
+xL                X
+XXXXXXXXXXXXXXXXXXX
+</script>
+
+<script type="notjs" id="map1">
+XXXXXXXXXXXXXXXXXXX
+Y        V     OOOZ
+Y                 Z
+YL    OZ   YO    LZ
+YL    LZ   YL    LZ
+YL O  LZ   YL  O LZ
+Y        l Y      Z
+Y     O     O     Z
+Y                 Z
+YY               ZZ
+Y              L  Z
+XXXXXXXXX-XXXXXXXXX
+X                 X
+X              O  X
+X                 X
+X                 X
+XL                X
+XXXXXXXXXXXXXXXXXXX
+</script>
+
+<!--
+
+wolfenstein 3d e1m1
+https://www.gamefaqs.com/pc/564603-wolfenstein-3d/faqs/39964
+http://i.imgur.com/scly9.png
+http://i.imgur.com/S9Oxh7R.png
+
+http://www.ppsloan.org/publications/StupidSH36.pdf
+http://www.lughertexture.com/floor-hires-textures/medieval-pavement-texture-download/dark-stone-blocks-floor-7-2202
+
+notes:
+
+- may not run well on lower-end systems!
+- requires increasing MAXLIGHTS constant below
+
+-->
+
+<script type="notjs" id="map2">
+                            ZZZzZZZZZzZZZ
+     XXXXXX                 Zo         oZ
+     X..ttX      XXXXXXXXXXXz  T  T  T  zZZZZ
+     X..ttX      X          Z           ZtttZ
+     X..tt X     X L    L   |     C     |  tZ
+     X..t  X     X          Z           ZtttZ
+     XXXXX-XXXXX X   XXXXXXXZ           ZZZZZ
+     X ttp pt  X X   X      Z           Z
+     X l   t l XXX   XXX    ZZZzZZ-ZZzZZZ
+     X         X       X        Z   Z
+     Xf   T    |   L   X        Z L Z
+     X         X       X        Z   Z
+XXXXXXtl     l XXXXXXXXX        Z   Z
+X + XXtt       X                Z   Z
+X L XXXXXX-XXXX            ZZZZZZ   ZZZ
+X   X   X   X              Z  |   L  AZ
+XX-XX   X L X              Z. ZZZ   ZZZ
+X   XXXXX   X              Z.+Z Z   Z
+X L X  .X   X              Zg+Z Z   Z
+X       X L X              ZZZZ Z L Z
+X   X  tX   X                   Z   Z
+X   XXXXXX-XXXXX                ZZ-ZZ                YYYYYYYYYY
+X L XX         X          XXXXxXp   pXxXXXX          Y     OooY
+X   XX p     p X          Xp             pX          Y L    LoY
+X   XX  L   L  X          X               XYYYYYYYYYYY        Y
+X    X         X          X                Y         Y        Y
+X    |         X          X  C    C    C   |    L    |        Y
+X    X         X          X                Y         Y  T. T  Y
+X   XX  L   L  X          X               XYYY    YYYY        Y
+X   XX p     p X          Xp             pX  YY  Y   Y L    L Y
+X   XX         X          XXXXXX     XXXXXX   Y  Y   Y      . Y
+X L XXXXXX-XXXXX                YY-YY         Y  Y   YYYOYYOYYY
+X   XXXXX   X                   Y   Y         Y  Y      Y  Y
+X   XXXXX   X                   Y L Y         Y  Y YYYYYYYYYY
+X   X  .X   X                   Y   Y         Y  YYY Y Y YdYY
+X       X L X                   Y   Y         Y   Y         Y
+X   X.  X   X                   Y   Y         Y L |         Y
+X L XXXXX   X                   Y L Y         Y   Y         Y
+X   XXXXX   XXXXXXXXXXXXX       Y   Y         YYYYYY Y Y Y YY
+X                X      XXX     Y   Y              YYYYYYYYYY
+X     L       L  |      |WX     Y   Y
+X                X      XXX     Y L Y
+XXXXXXXXXXXXXXXXXX-XXXXXX       Y   Y
+          XX  X  | +X      YYYYYYY-YYYYYYY
+         XW|  X  X X       Ybd  Y   Y    Y
+          XX     XX        Y    | L | s  Y
+            X-XXXX         Y    Y   Y    Y
+            X  X           YYYYYY   YYYYYY
+            X EX           Y    Y   Y    Y
+            XXXX           Y >  | L |d  bY
+                           Y    Y   Y    Y
+                           YYYYYY   YYYYYY
+                           Y             Y
+                           Y  L   L   L dY
+                           Y      d      Y
+                           YyYYyYYyYYyYYyY
+</script>
+
+<script type="notjs" id="map3">
+XXXXXXXXXXXXXXXXXXX
+X                 X
+X                 X
+X                 X
+X                 X
+X                 X
+XXXXXXXXXXXXXXXXXXX
+
+</script>
+
+<!-- include 3D math library -->
+<script src="lib/3d-math.js"></script>
+
+<body>
+<canvas id="c"></canvas>
+<div id="ui" style="display: block"><table>
+    <tr><td colspan="2">arrows: move, space: open</td></tr>
+    <tr><td>option:</td><td width="120px"><input type="range" min=0 max=100 value=50 id="option" name="option"></td></tr>
+    <tr><td>fps:</td><td width="120px"><span id="fps">-----</span></td></tr>
+    <tr><td>loc:</td><td><span id="loc">-----</span></td></tr>
+</table></div>
+<div id="audios" style="display: none">
+<audio id="bounce">
+    <source id="audio-bump" src="resources/Bounce-SoundBible.com-12678623.mp3" type="audio/mpeg">
+    <source id="audio-door" src="resources/Big_door_closed-Clemens_F-941522533.mp3" type="audio/mpeg">
+</audio>
+</div>
+</body>
+
+<script type="notjs" id="vertex-shader">
+    precision mediump float;
+
+    uniform mat4 u_matrixP;         // projection matrix    ( camera -> clip   )
+    uniform mat4 u_matrixV;         // view matrix          (  world -> camera )
+    uniform mat4 u_matrixM;         // model matrix         (  local -> world  )
+    uniform mat4 u_matrixVit;       // inverse-transpose of view matrix
+    uniform mat4 u_matrixMit;       // inverse-transpose of model matrix
+
+    attribute vec3 a_pos_local;     // vert position in local space
+    attribute vec3 a_norm_local;    // vert normal in local space
+    attribute vec4 a_color;         // vert color
+    attribute vec2 a_uv;            // vert uv
+
+    varying vec4 v_color;           // vert color
+    varying vec3 v_norm_world;      // vert normal wrt world
+
+    void main()
+    {
+        vec4 pw = u_matrixM * vec4(a_pos_local, 1);
+        vec4 pc = u_matrixV * pw;
+        vec3 nw = normalize((u_matrixMit * vec4(a_norm_local, 0)).xyz);
+        vec3 nc = normalize((u_matrixVit * vec4(nw,           0)).xyz);
+        
+        gl_Position  = u_matrixP * pc;
+        v_color      = a_color;
+        v_norm_world = a_norm_local; //(u_matrixMit * vec4(a_norm_local, 0.0)).xyz;
+    }
+</script>
+
+<script type="notjs" id="fragment-shader">
+    precision mediump float;
+    
+    varying vec4 v_color;       // vert color
+    varying vec3 v_norm_world;  // vert normal wrt world
+    
+    void main()
+    {
+        float mult = 1.0;
+        if(abs(v_norm_world.x) > 0.9) mult = 0.5;
+        gl_FragColor = vec4(v_color.rgb * mult, v_color.a);
+    }
+</script>
+
+<script>
+    const MAPLOAD          = "map2";
+    const CHECK_COLLISIONS = true;
+    var   drawFloor        = true;
+    var   drawCeiling      = true;
+    
+    //////////////////////////////
+    // set up webgl
+    
+    var canvas = document.getElementById("c");
+    var gl = canvas.getContext("webgl", {antialias:true});
+    var ext = gl.getExtension("WEBGL_depth_texture");
+
+    gl.enable( gl.DEPTH_TEST );
+    gl.depthFunc( gl.LESS );
+    gl.depthMask( true );
+    gl.enable( gl.CULL_FACE );
+    gl.enable( gl.BLEND );
+    gl.blendEquation( gl.FUNC_ADD );
+    gl.blendFunc( gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA );
+    
+    var vertShaderSrc = document.getElementById("vertex-shader").text;
+    var fragShaderSrc = document.getElementById("fragment-shader").text;
+    var vertShader = createShader(gl, gl.VERTEX_SHADER,   vertShaderSrc);
+    var fragShader = createShader(gl, gl.FRAGMENT_SHADER, fragShaderSrc);
+    var program = createProgram(gl, vertShader, fragShader);
+    gl.useProgram(program);
+    
+    var posLocation   = gl.getAttribLocation(program, "a_pos_local");
+    var normLocation  = gl.getAttribLocation(program, "a_norm_local");
+    var colorLocation = gl.getAttribLocation(program, "a_color");
+    var uvLocation    = gl.getAttribLocation(program, "a_uv");
+    
+    var matrixPLocation = gl.getUniformLocation(program, "u_matrixP");
+    var matrixMLocation = gl.getUniformLocation(program, "u_matrixM");
+    var matrixVLocation = gl.getUniformLocation(program, "u_matrixV");
+    var matrixMitLocation = gl.getUniformLocation(program, "u_matrixMit");
+    var matrixVitLocation = gl.getUniformLocation(program, "u_matrixVit");
+    
+    gl.enableVertexAttribArray(posLocation);
+    gl.enableVertexAttribArray(colorLocation);
+    gl.enableVertexAttribArray(normLocation);
+    
+    ///////////////////////////
+    // game info
+    
+    // game states
+    var prevTime = 0;
+    var frames = 0, prevFramesTime = 0;
+    var keysDown = [];
+    var keys = { // see http://www.asquare.net/javascript/tests/KeyCode.html
+        up:    38,
+        down:  40,
+        left:  37,
+        right: 39,
+        space: 32,
+        tab:    9,
+        bksp:   8,
+    };
+    
+    // player states
+    var player = {
+        loc:[0,0,0],
+        fwdSpeed:0,
+        dir: 0,
+        updown: 0,
+        dirSpeed:0,
+        ij:[0,0],
+        room:0,
+        fov:90,
+        clip:[0.01,100],
+    };
+    
+    
+    // drawable objects
+    var objectWallX    = generateCubeObject([0.40,0.40,0.40,1.00], [0,0]);
+    var objectWallX2   = generateCubeObject([0.40,0.40,0.40,1.00], [2,0]);
+    var objectWallY    = generateCubeObject([0.00,0.00,0.40,1.00], [2,2]);
+    var objectWallY2   = generateCubeObject([0.00,0.00,0.40,1.00], [0,2]);
+    var objectWallZ    = generateCubeObject([0.40,0.25,0.00,1.00], [4,3]);
+    var objectWallZ2   = generateCubeObject([0.40,0.25,0.00,1.00], [6,3]);
+    //var objectTree     = generateCylinderObject(8, [0.2,0.5,0.2,1.0], false, 0.2, -1.0,  0.8);
+    var objectTree     = generateTreeObject(8, false);
+    var objectPlate    = generateCylinderObject(8, [0.2,0.2,0.2,1.0], false, 0.4, -1.0, -0.9);
+    var objectWell     = generateCylinderObject(8, [0.7,0.7,0.7,1.0], false, 1.0, -1.0, -0.2);
+    var objectLight    = generateCylinderObject(8, [0.7,1.0,0.7,1.0], false, 0.2,  0.9,  1.0);
+    var objectLight2   = generateLampObject(8, false);
+    var objectFloor    = generateQuadObject([0,0,0], [0.6,0.6,0.6,1.0], [1,0,0], [0,0,1], [0, 1,0], 1, [0,15]);
+    var objectCeiling  = generateQuadObject([0,0,0], [0.5,0.5,0.5,1.0], [-1,0,0], [0,0,1], [0,-1,0], 1, [0,15]);
+    var objectTreasure = generateCube2Object([0,-0.9,0],[0.1,0.1,0.1], [1.0,1.0,0.2,1.0], [0,15])
+    var objectTable    = generateTableObject(8, [0.75, 0.75, 0.75, 1.0], false, 0.9, 0.6, 0.05);
+    var objectTable2   = generateTable2Object(8, [0.5, 0.5, 0.1, 1.0], false, 0.9, 0.6, 0.05);
+    var objectCross    = generateCrossObject();
+    var objectLightProbe = generateCube2Object([0,0,0],[0.1,0.1,0.1],[1,1,1,1], [0,15]);
+    
+    var objectFloorStone = generateQuadObject([0,-1,0], [0,0,0,0], [1,0,0], [0,0,1], [0,1,0], 1, [0,14]);
+    
+    //var objectNSDoor   = generate_doorNS();
+    //var objectNSDoor   = generateCube2Object([0,0,0], [0.1,1.0,1.0], [0,0,0,0], [4,7]); //[0.1,0.2,0.3,1.0]
+    var objectNSDoor   = generate_doorNS();
+    //var objectEWDoor   = generate_doorEW();
+    var objectEWDoor   = generateCube2Object([0,0,0], [1.0,1.0,0.1], [0.0,0.8,0.8,1.0], [4,7]); //[0.1,0.2,0.3,1.0]
+    //var objectPlant    = generate_bananaplant();
+    var objectPlant    = generateCylinderObject(8, [0.2,0.5,0.2,1.0], false, 0.2, -1.0, -0.2);
+    //var objectChandelier = generate_chandelier();
+    var objectChandelier = generateCylinderObject(8, [1.0,1.0,0.7,1.0], false, 0.4,  0.9,  1.0);
+    
+    
+    ///////////////////////////
+    // map stuff
+    
+    // x increases west-to-east, z increases north-to-south, and y increases floor-to-ceiling
+    // player start    V : facing south, > : east, ^ : north, < : west
+    // obstacle info   X : wall, O : cylinder, o : tree
+    // lighting info   L : light
+    
+    var map = document.getElementById(MAPLOAD).text.split("\n");
+    
+    // convenient dictionaries for converting map symbols to drawable objects or player start directions
+    var typeToObject = {
+        "X": objectWallX,
+        "x": objectWallX2,
+        "Y": objectWallY,
+        "y": objectWallY2,
+        "Z": objectWallZ,
+        "z": objectWallZ2,
+        
+        "O": objectWell,
+        "T": objectTable,
+        "o": objectTree,
+        "p": objectPlant,
+        
+        "L": objectLight,
+        "l": objectLight2,
+        "C": objectChandelier,
+        
+        "d": objectPlate,
+        "+": objectCross,
+        
+        "t": objectTreasure,
+    };
+    var typeToDirection = {
+        "V": 0,
+        ">": 1,
+        "^": 2,
+        "<": 3
+    };
+    var typeOfDoors = ['-','|'];
+    var typeOfWalls = ["X","Y","Z","x","y","z"];
+    var typeOfLights = {
+        "L":{ h:  0.88, c:[1.0, 1.0, 1.0,  1.5] },
+        "l":{ h:  0.20, c:[0.7, 1.0, 0.7,  1.5] },
+        "C":{ h:  0.88, c:[1.0, 1.0, 0.7,  6.0] },
+        "+":{ h: -0.70, c:[1,0, 0.2, 0.2,  2.0] },
+        "W":{ h:  0.00, c:[1.0, 0.1, 0.2, 16.0] },
+        };
+    var typeOfObstacles = typeOfWalls.concat(["O","T","o","p","l",]);
+    
+    // gather info about map
+    var mapSize = map.length;
+    var drawables = {}; // a collection of drawable objects
+    var doors = [];     // all doors
+    for(var i = 0; i < map.length; i++) {
+        var maprow = map[i];
+        mapSize = Math.max(mapSize, maprow.length);
+        for(var j = 0; j < maprow.length; j++) {
+            var ij = [i,j];
+            var pos = [j*2, 0, i*2];
+            var t = maprow[j];
+            
+            // drawable objects
+            if(t in typeToObject) {
+                drawables[ij] = {
+                    loc: pos,
+                    type: t,
+                    object: typeToObject[t],
+                    room: -1,
+                };
+            }
+            
+            if(typeOfDoors.indexOf(t) != -1) {
+                doors.push({
+                    loc: pos,
+                    ij: [i,j],
+                    type: t,
+                    object: (t=="-"?objectEWDoor:objectNSDoor),
+                    openedTime: -100.0,
+                    openVal: 0.0,
+                    rooms: [],
+                    playSound: false,
+                });
+            }
+            
+            // player start location and orientation
+            if(t in typeToDirection) {
+                player.loc = pos;
+                player.dir = typeToDirection[t] * Math.PI / 2.0;
+                player.ij  = [i,j];
+            }
+        }
+    }
+    
+    var roomVisibleIJ = {};
+    var roomVisibleDrawables = {};
+    var roomDoors = {};
+    var ijToRoomID = {};
+    var ijToDoor = {};
+    var doorToRoomIDS = {};
+    for(var i = 0; i < map.length; i++) {
+        for(var j = 0; j < map[i].length; j++) { ijToRoomID[[i,j]] = -1; }
+    }
+    for(var idoor=0; idoor < doors.length; idoor++) {
+        doorToRoomIDS[doors[idoor].ij] = [-1,-1];
+        ijToDoor[doors[idoor].ij] = doors[idoor];
+    }
+    function getRoomID(ij) {
+        if(!validIJ(ij)) return null;
+        if(ij in doorToRoomIDS) {
+            if(ijToDoor[ij].type == "|") {
+                if(player.loc[0] % 2 > 1) {
+                    return doorToRoomIDS[ij][0];
+                } else {
+                    return doorToRoomIDS[ij][1];
+                }
+            } else {
+                if(player.loc[2] % 2 > 1) {
+                    return doorToRoomIDS[ij][0];
+                } else {
+                    return doorToRoomIDS[ij][1];
+                }
+            }
+        }
+        return ijToRoomID[ij];
+    }
+    function floodFillHelper(ij, side, id, processing) {
+        if(!validIJ(ij)) return;
+        var t = map[ij[0]][ij[1]];
+        if(typeOfDoors.indexOf(t) != -1) {
+            doorToRoomIDS[ij][side] = id;
+        } else {
+            processing.push(ij);
+        }
+    }
+    function floodFillHelper_Visible(ij, id) {
+        if(!(ij in drawables)) return;
+        var drawable = drawables[ij];
+        if(roomVisibleDrawables[id].indexOf(drawable) != -1) return;
+        roomVisibleDrawables[id].push(drawable);
+    }
+    function floodFill(ij, id) {
+        if(!validIJ(ij) || ijToRoomID[ij] != -1) return false;
+        if(!(id in roomVisibleIJ)) {
+            roomVisibleIJ[id] = [];
+            roomVisibleDrawables[id] = [];
+        }
+        var processing = [ij];
+        while(processing.length > 0) {
+            var ij = processing.pop();
+            roomVisibleIJ[id].push(ij);
+            floodFillHelper_Visible([ij[0]+0,ij[1]+0], id);
+            floodFillHelper_Visible([ij[0]-1,ij[1]+0], id);
+            floodFillHelper_Visible([ij[0]+1,ij[1]+0], id);
+            floodFillHelper_Visible([ij[0]+0,ij[1]-1], id);
+            floodFillHelper_Visible([ij[0]+0,ij[1]+1], id);
+            floodFillHelper_Visible([ij[0]+1,ij[1]+1], id);
+            floodFillHelper_Visible([ij[0]-1,ij[1]+1], id);
+            floodFillHelper_Visible([ij[0]-1,ij[1]-1], id);
+            floodFillHelper_Visible([ij[0]+1,ij[1]-1], id);
+            if(ijToRoomID[ij] != -1) continue;
+            ijToRoomID[ij] = id;
+            var t = map[ij[0]][ij[1]];
+            if(typeOfWalls.indexOf(t) != -1) continue;
+            floodFillHelper([ij[0],ij[1]+1], 0, id, processing);
+            floodFillHelper([ij[0],ij[1]-1], 1, id, processing);
+            floodFillHelper([ij[0]+1,ij[1]], 0, id, processing);
+            floodFillHelper([ij[0]-1,ij[1]], 1, id, processing);
+        }
+        return true;
+    }
+    var roomID = 0;
+    for(var idoor = 0; idoor < doors.length; idoor++) {
+        var oi = 0, oj = 0;
+        var ij = doors[idoor].ij;
+        if(doors[idoor].type == "|") { oj = 1; } else { oi = 1; }
+        if(floodFill([ij[0]+oi,ij[1]+oj], roomID)) { roomID += 1; }
+        if(floodFill([ij[0]-oi,ij[1]-oj], roomID)) { roomID += 1; }
+    }
+    if(true) {
+        // debug printout of room ids
+        for(var i = 0; i < map.length; i++) {
+            var row = map[i];
+            var s = '';
+            for(var j = 0; j < row.length; j++) {
+                var ij = [i,j];
+                if(ij in doorToRoomIDS) {
+                    s += " DD";
+                } else if(ijToRoomID[ij] != -1) {
+                    s += ' '+("   " + ijToRoomID[ij]).slice(-2)
+                } else {
+                    s += ' ' + "  ";
+                }
+            }
+            console.log(("  " + i).slice(-2) + ": " + s);
+        }
+    }
+    
+    for(var i = 0; i < roomID; i++) {
+        roomDoors[i] = [];
+    }
+    var audios = document.getElementById('audios');
+    for(var i = 0; i < doors.length; i++) {
+        var door = doors[i];
+        var rooms = doorToRoomIDS[door.ij];
+        roomDoors[rooms[0]].push(door);
+        roomDoors[rooms[1]].push(door);
+        var sound = document.createElement('audio');
+        sound.id = "dooropen" + i;
+        sound.src = "resources/Big_door_closed-Clemens_F-941522533.mp3";
+        sound.type = "audio/mpeg";
+        audios.appendChild(sound);
+    }
+    
+    
+    ///////////////////////////////////////////
+    // game update and render
+    
+    function renderScene(camera, useProbe, useLights, calcProbes)
+    {
+        gl.useProgram(program);
+        
+        var ratio     = camera.width / camera.height;
+        var xformP    = m4.perspective(camera.fov / ratio * Math.PI / 180.0, ratio, camera.clip[0], camera.clip[1]);
+        // note: lookAt returns the inverse of the view xform matrix, so we need to invert
+        var target = [
+            camera.loc[0]+Math.sin(camera.dir)*Math.cos(camera.updown),
+            camera.loc[1]+Math.sin(camera.updown),
+            camera.loc[2]+Math.cos(camera.dir)*Math.cos(camera.updown)
+            ];
+        var up = [
+            Math.sin(camera.dir)*Math.sin(-camera.updown),
+            Math.cos(camera.updown),
+            Math.cos(camera.dir)*Math.sin(-camera.updown)
+            ];
+        
+        var xformVinv = m4.lookAt(camera.loc, target, up);
+        var xformV    = m4.inverse(xformVinv);
+        
+        gl.uniformMatrix4fv(matrixPLocation,   false, xformP);
+        gl.uniformMatrix4fv(matrixVLocation,   false, xformV);
+        gl.uniformMatrix4fv(matrixVitLocation, false, m4.transpose(xformVinv));
+        
+        // determine visible rooms
+        var visibleRooms = [];
+        if(camera.ij in ijToRoomID) {
+            var processing = [getRoomID(camera.ij)];
+            while(processing.length) {
+                var r = processing.pop();
+                if(visibleRooms.indexOf(r) != -1) continue;
+                if(r == -1) continue;
+                visibleRooms.push(r);
+                for(var i in roomDoors[r]) {
+                    var d = roomDoors[r][i];
+                    if(d.openVal <= 0.0) continue;
+                    var rs = doorToRoomIDS[d.ij];
+                    processing.push(rs[0]);
+                    processing.push(rs[1]);
+                }
+            }
+        }
+        
+        if(drawFloor)
+        {
+            var xformM = m4.translation(mapSize, -1, mapSize);
+            xformM = m4.scale(xformM, mapSize, mapSize, mapSize);
+            var xformMinv = m4.identity(); // ignore scaling and translation
+            gl.uniformMatrix4fv(matrixMLocation,   false, xformM);
+            gl.uniformMatrix4fv(matrixMitLocation, false, m4.transpose(xformMinv));
+            drawObject(objectFloor);
+        }
+
+        if(drawCeiling)
+        {
+            var xformM = m4.translation(mapSize, 1, mapSize);
+            xformM = m4.scale(xformM, mapSize, mapSize, mapSize);
+            var xformMinv = m4.identity(); // ignore scaling and translation
+            gl.uniformMatrix4fv(matrixMLocation,   false, xformM);
+            gl.uniformMatrix4fv(matrixMitLocation, false, m4.transpose(xformMinv));
+            drawObject(objectCeiling);
+        }
+
+        // draw all visible drawable objects
+        for(var i = 0; i < visibleRooms.length; i++) {
+            var ds = roomVisibleDrawables[visibleRooms[i]];
+            for(var j = 0; j < ds.length; j++) {
+                var drawable = ds[j];
+                // calculate transformation and its inverse
+                var xformM    = m4.translation( drawable.loc[0],  drawable.loc[1],  drawable.loc[2]);
+                var xformMinv = m4.translation(-drawable.loc[0], -drawable.loc[1], -drawable.loc[2]);
+                gl.uniformMatrix4fv(matrixMLocation,   false, xformM);
+                gl.uniformMatrix4fv(matrixMitLocation, false, m4.transpose(xformMinv));
+                drawObject(drawable.object);
+            }
+        }
+
+        // draw all visible doors
+        for(i = 0; i < doors.length; i++) {
+            var door = doors[i];
+            var vis = (visibleRooms.indexOf(doorToRoomIDS[door.ij][0]) != -1) | (visibleRooms.indexOf(doorToRoomIDS[door.ij][1]) != -1);
+            if(!vis) continue;
+            // calculate transformation and its inverse
+            var tx = door.loc[0], ty = door.loc[1], tz = door.loc[2];
+            if(door.type == "-") {
+                tx += door.openVal * 2.0;
+            } else {
+                tz += door.openVal * 2.0;
+            }
+            var xformM    = m4.translation( tx,  ty,  tz);
+            var xformMinv = m4.translation(-tx, -ty, -tz);
+            gl.uniformMatrix4fv(matrixMLocation,   false, xformM);
+            gl.uniformMatrix4fv(matrixMitLocation, false, m4.transpose(xformMinv));
+            drawObject(door.object);
+        }
+    }
+    
+    
+    function update(currTime)
+    {
+        currTime *= 0.001;
+        var deltaTime = Math.min(currTime - prevTime, 0.25);
+        prevTime = currTime;
+        
+        frames++;
+        if(prevFramesTime == 0) prevFramesTime = currTime;
+        if(frames > 100) {
+            var framesTime = currTime - prevFramesTime;
+            var fps = frames / framesTime;
+            frames = 0;
+            prevFramesTime = currTime;
+            var fpsText = "" + Math.floor(fps * 100.0) / 100.0;
+            fpsText += (fpsText.indexOf('.')==-1 ? '.' : '') + "000000";
+            document.getElementById('fps').innerHTML = fpsText.slice(0,5);
+        }
+        
+        // handle player control
+        if(keysDown.left) {
+            player.dirSpeed += 15.0 * deltaTime;
+        }
+        if(keysDown.right) {
+            player.dirSpeed -= 15.0 * deltaTime;
+        }
+        if(keysDown.up) {
+            player.fwdSpeed += 40.0 * deltaTime;
+        }
+        if(keysDown.down) {
+            player.fwdSpeed -= 40.0 * deltaTime;
+        }
+        if(keysDown.space) {
+            openDoor(currTime);
+        }
+        
+        // handle player movement
+        player.loc[0] += player.fwdSpeed * Math.sin(player.dir) * deltaTime;
+        player.loc[2] += player.fwdSpeed * Math.cos(player.dir) * deltaTime;
+        player.dir += player.dirSpeed * deltaTime;
+        player.fwdSpeed *= Math.pow(0.001, deltaTime);
+        player.dirSpeed *= Math.pow(0.001, deltaTime);
+        
+        if(CHECK_COLLISIONS) {
+            var hit = handleObstacles();
+            if(hit > 0.02) {
+                playSound('bounce');
+            }
+        }
+        player.ij = [ Math.round(player.loc[2]/2), Math.round(player.loc[0]/2) ];
+        player.room = getRoomID(player.ij);
+        document.getElementById('loc').innerHTML = "(" + [Math.floor(player.loc[0]*10)/10, Math.floor(player.loc[2]*10)/10] + "), " + " (" + player.ij + "), " + player.room + "/" + roomID;
+        
+        // handle doors
+        var dt01 = 1.0, dt12 = 5.0, dt23 = 1.0;
+        for(var i = 0; i < doors.length; i++)
+        {
+            var door = doors[i];
+            var t0 = door.openedTime;
+            var t1 = t0 + dt01;
+            var t2 = t1 + dt12;
+            var t3 = t2 + dt23;
+            
+            if(t0 <= currTime && currTime < t1) {
+                door.openVal += deltaTime;
+                if(door.playSound) {
+                    door.playSound = false;
+                    playSound('dooropen' + i);
+                }
+            } else if(t1 <= currTime && currTime < t2) {
+                // stay open
+                door.playSound = true;
+            } else if(t2 <= currTime) {
+                door.openVal -= deltaTime;
+                if(door.playSound) {
+                    door.playSound = false;
+                    playSound('dooropen' + i);
+                }
+            }
+            door.openVal = Math.max(0.0, Math.min(0.96, door.openVal));
+        }
+        
+        
+        // resize and redraw the canvas!!
+        resize(canvas);
+        gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+        gl.clearColor(0, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        
+        gl.useProgram(program);
+        
+        renderScene({
+            loc: player.loc,
+            dir: player.dir,
+            updown: player.updown,
+            ij: player.ij,
+            width: gl.canvas.width,
+            height: gl.canvas.height,
+            fov: player.fov,
+            clip: player.clip,
+            }, true, true, false);
+        
+        requestAnimationFrame(update);
+    }
+    requestAnimationFrame(update);
+    
+    function playSound(id) {
+        var audio = document.getElementById(id);
+        if(!audio) return;
+        audio.currentTime = 0;
+        audio.loop = false;
+        audio.play();
+    }
+    
+    function openDoor(currTime)
+    {
+        var x = player.loc[0] + Math.sin(player.dir) * 1.5;
+        var z = player.loc[2] + Math.cos(player.dir) * 1.5;
+        var i = Math.round(z/2), j = Math.round(x/2);
+        var ij = [i,j];
+        if(!validIJ(ij)) return;
+        if(!(ij in ijToDoor)) return;
+        var door = ijToDoor[ij];
+        door.openedTime = currTime;
+        door.playSound = true;
+    }
+    
+    function validIJ(loc)
+    {
+        var i = loc[0], j = loc[1];
+        if(i < 0 || i >= map.length) return false;
+        var row = map[i];
+        if(j < 0 || j >= row.length) return false;
+        return true;
+    }
+    
+    function handleObstacles() {
+        var ij = player.ij;
+        var loc = player.loc;
+        var i = ij[0], j = ij[1];
+        var x = loc[0], z = loc[2];
+        var hit = 0.0;
+        if(handleObstaclesHelper(ij, [+1,0])) { // north
+            maxz = (i+1)*2-1.2;
+            if(player.loc[2] > maxz) {
+                hit = player.loc[2] - maxz;
+                player.loc[2] = maxz;
+            }
+        }
+        if(handleObstaclesHelper(ij, [-1,0])) { // south
+            minz = (i-1)*2+1.2;
+            if(player.loc[2] < minz) {
+                hit = player.loc[2] - minz;
+                player.loc[2] = minz;
+            }
+        }
+        if(handleObstaclesHelper(ij, [0,-1])) { // west
+            minx = (j-1)*2+1.2;
+            if(player.loc[0] < minx) {
+                hit = minx - player.loc[0];
+                player.loc[0] = minx;
+            }
+        }
+        if(handleObstaclesHelper(ij, [0,+1])) { // east
+            maxx = (j+1)*2-1.2;
+            if(player.loc[0] > maxx) {
+                hit = player.loc[0] - maxx;
+                player.loc[0] = maxx;
+            }
+        }
+        if(hit > 0.0) return hit;
+        
+        // check corners
+        if(handleObstaclesHelper(ij, [+1,+1])) { //northeast
+            
+        }
+        return hit;
+    }
+    function handleObstaclesHelper(ij, offset) {
+        var ijo = [ij[0]+offset[0], ij[1]+offset[1]];
+        if(!validIJ(ijo)) return false;
+        if(ijo in ijToDoor) return ijToDoor[ijo].openVal < 0.9;
+        return (typeOfObstacles.indexOf(map[ijo[0]][ijo[1]]) != -1);
+    }
+    
+    function hitObstacle(loc, offset)
+    {
+        var x = loc[0] + offset[0], y = loc[1] + offset[1], z = loc[2] + offset[2];
+        var i = Math.round(z/2), j = Math.round(x/2);
+        if(i < 0 || j < 0 || i >= map.length || j >= map[i].length) return false;
+        var t = map[i][j];
+        if(t == '-' || t == '|') {
+            for(var id = 0; id < doors.length; id++) {
+                var door = doors[id];
+                if(door.ij[0] == i && door.ij[1] == j) {
+                    return (door.openVal < 0.9);
+                }
+            }
+        }
+        return typeOfObstacles.indexOf(t) != -1;
+    }
+    
+    function drawObject(object)
+    {
+        // setup position buffer
+        gl.bindBuffer(gl.ARRAY_BUFFER, object.posBuffer);
+        var size = 3;
+        var type = gl.FLOAT;
+        var normalize = false;
+        var stride = 0;
+        var offset = 0;
+        gl.vertexAttribPointer(posLocation, size, type, normalize, stride, offset);
+        
+        // setup normal buffer
+        if(normLocation >= 0) {
+            gl.bindBuffer(gl.ARRAY_BUFFER, object.normBuffer);
+            var size = 3;
+            var type = gl.FLOAT;
+            var normalize = false;
+            var stride = 0;
+            var offset = 0;
+            gl.vertexAttribPointer(normLocation, size, type, normalize, stride, offset);
+        }
+        
+        // setup color buffer
+        gl.bindBuffer(gl.ARRAY_BUFFER, object.colorBuffer);
+        var size = 4;
+        var type = gl.FLOAT;
+        var normalize = false;
+        var stride = 0;
+        var offset = 0;
+        gl.vertexAttribPointer(colorLocation, size, type, normalize, stride, offset);
+        
+        // setup uv buffer
+        if(uvLocation >= 0) {
+            gl.bindBuffer(gl.ARRAY_BUFFER, object.uvBuffer);
+            var size = 2;
+            var type = gl.FLOAT;
+            var normalize = false;
+            var stride = 0;
+            var offset = 0;
+            gl.vertexAttribPointer(uvLocation, size, type, normalize, stride, offset);
+        }
+        
+        // draw the triangles!
+        var primitiveType = gl.TRIANGLES;
+        var offset = 0;
+        gl.drawArrays(primitiveType, offset, object.length);
+    }
+    
+    
+    ////////////////////////////////////////////
+    // mesh generator helper functions
+    
+    function generateCubeObject(color, texID) {
+        var data = { pos:[], norm:[], color:[], uv:[], length:0 };
+        appendCube2(data, [0,0,0], [1,1,1], color, texID);
+        return dataToObject(data);
+    }
+    
+    function generateCylinderObject(count, color, smooth, r, y0, y1)
+    {
+        var data = { pos:[], norm:[], color:[], uv:[], length:0 };
+        appendCylinder(data, count, color, smooth, r, y0, y1);
+        return dataToObject(data);
+    }
+    
+    function generateCrossObject() {
+        var data = { pos:[], norm:[], color:[], uv:[], length:0 };
+        appendCube2(data, [0,-0.7,0], [0.35,0.1,0.1], [1,1,1,1], [0,15]);
+        appendCube2(data, [0,-0.7,0], [0.1,0.35,0.1], [1,1,1,1], [0,15]);
+        appendCube2(data, [0,-0.7,0], [0.1,0.1,0.35], [1,1,1,1], [0,15]);
+        appendCube2(data, [0,-0.7,0], [0.15,0.15,0.15], [1,0,0,1], [0,15]);
+        return dataToObject(data);
+    }
+    
+    function generateTableObject(count, color, smooth, radius, height, thickness) {
+        var data = { pos:[], norm:[], color:[], uv:[], length:0 };
+        var r2 = radius / 2;
+        var r10 = radius / 10;
+        appendCylinder(data, count, [0.6,0.5,0.1,1.0], smooth, radius, -1 + (height-thickness), -1 + (height+thickness));
+        appendCylinder(data, count, [1.0,1.0,1.0,1.0], smooth, r10, -1+thickness, -1+(height-thickness));
+        appendCylinder(data, count, [1.0,1.0,1.0,1.0], smooth, r2, -1, -1+thickness);
+        return dataToObject(data);
+    }
+    function generateTable2Object(count, color, smooth, radius, height, thickness) {
+        var data = { pos:[], norm:[], color:[], uv:[], length:0 };
+        var r2 = radius / 2;
+        var r10 = radius / 20;
+        appendCylinder(data, count, color, smooth, radius, -1 + (height-thickness), -1 + (height+thickness));
+        appendCube2(data, [-r2, -1+height/2, -r2], [r10,height/2,r10], color, [0,15]);
+        appendCube2(data, [ r2, -1+height/2, -r2], [r10,height/2,r10], color, [0,15]);
+        appendCube2(data, [ r2, -1+height/2,  r2], [r10,height/2,r10], color, [0,15]);
+        appendCube2(data, [-r2, -1+height/2,  r2], [r10,height/2,r10], color, [0,15]);
+        return dataToObject(data);
+    }
+    
+    function generateTreeObject(count, smooth) {
+        var potColor    = [1,1,0,1],   potRadius    = 0.3,  potHeight    = 0.3;
+        var trunkColor  = [1,1,1,1],   trunkRadius  = 0.05, trunkHeight  = 0.6;
+        var leavesColor = [0,0.5,0,1], leavesRadius = 0.5,  leavesHeight = 0.5;
+        
+        var data = { pos:[], norm:[], color:[], uv:[], length:0 };
+        appendCylinder(data, count, potColor, smooth, potRadius*0.9, -1, -1+potHeight*0.9);
+        appendCylinder(data, count, potColor, smooth, potRadius, -1+potHeight*0.9, -1+potHeight);
+        appendCylinder(data, count, trunkColor, smooth, trunkRadius, -1+potHeight, -1+potHeight+trunkHeight);
+        appendCylinder(data, count, leavesColor, smooth, leavesRadius, -1+potHeight+trunkHeight, -1+potHeight+trunkHeight+leavesHeight);
+        appendCylinder(data, count, leavesColor, smooth, leavesRadius*0.9, -1+potHeight+trunkHeight-leavesHeight*0.1, -1+potHeight+trunkHeight+leavesHeight+leavesHeight*0.1);
+        return dataToObject(data);
+    }
+    
+    function generateLampObject(count, smooth) {
+        var baseRadius = 0.2, baseHeight = 0.02;
+        var postRadius = 0.05, postHeight = 0.9;
+        var topRadius = 0.2, topHeight = 0.2;
+        
+        var data = { pos:[], norm:[], color:[], uv:[], length:0 };
+        appendCylinder(data, count, [1,1,0,1], smooth, baseRadius, -1, -1+baseHeight);
+        appendCylinder(data, count, [1,1,0,1], smooth, postRadius, -1+baseHeight, -1+baseHeight+postHeight);
+        appendCylinder(data, count, [0,1,0,1], smooth, topRadius, -1+baseHeight+postHeight, -1+baseHeight+postHeight+topHeight);
+        return dataToObject(data);
+    }
+    
+    function generateCube2Object(loc, size, color, texID) {
+        var data = { pos:[], norm:[], color:[], uv:[], length:0 };
+        appendCube2(data, loc, size, color, texID);
+        return dataToObject(data);
+    }
+    function generate_doorNS() {
+        var color = [0.0,0.8,0.8,1.0];
+        var data = { pos:[], norm:[], color:[], uv:[], length:0 };
+        appendQuad(data, [-0.1,0,0], color, [0,0, 1], [0,-1,0], [-1,0,0], 1, [4,7]);
+        appendQuad(data, [ 0.1,0,0], color, [0,0,-1], [0,-1,0], [ 1,0,0], 1, [4,7]);
+        return dataToObject(data);
+    }
+    
+    function generateQuadObject(loc, color, u, v, norm, size, texID) {
+        var data = { pos:[], norm:[], color:[], uv:[], length:0 };
+        appendQuad(data, loc, color, u, v, norm, size, texID);
+        return dataToObject(data);
+    }
+    
+    
+    
+    
+    function appendCube2(target, loc, size, color, texID) {
+        var lx = loc[0], ly = loc[1], lz = loc[2];
+        var sx = size[0], sy = size[1], sz = size[2];
+        var r = color[0], g = color[1], b = color[2], a = color[3];
+        
+        var ti = texID[0], tj = texID[1];
+        var u0 = ((ti * 64 +  0) / 64) / 8.0, v0 = ((tj * 64 +  0) / 64) / 16.0;
+        var u1 = ((ti * 64 + 63) / 64) / 8.0, v1 = ((tj * 64 + 63) / 64) / 16.0;
+        
+        target.pos.push(
+            //              V                      V                      V
+            lx-sx, ly-sy, lz-sz,   lx-sx, ly+sy, lz-sz,   lx+sx, ly-sy, lz-sz, // north face
+            lx+sx, ly-sy, lz-sz,   lx-sx, ly+sy, lz-sz,   lx+sx, ly+sy, lz-sz,
+            lx+sx, ly-sy, lz+sz,   lx+sx, ly+sy, lz+sz,   lx-sx, ly-sy, lz+sz, // south face
+            lx-sx, ly-sy, lz+sz,   lx+sx, ly+sy, lz+sz,   lx-sx, ly+sy, lz+sz,
+            
+            //V                      V                      V
+            lx-sx, ly-sy, lz-sz,   lx-sx, ly-sy, lz+sz,   lx-sx, ly+sy, lz-sz, // west face
+            lx-sx, ly+sy, lz-sz,   lx-sx, ly-sy, lz+sz,   lx-sx, ly+sy, lz+sz,
+            lx+sx, ly-sy, lz+sz,   lx+sx, ly-sy, lz-sz,   lx+sx, ly+sy, lz+sz, // east face
+            lx+sx, ly+sy, lz+sz,   lx+sx, ly-sy, lz-sz,   lx+sx, ly+sy, lz-sz,
+            
+            lx-sx, ly+sy, lz-sz,   lx-sx, ly+sy, lz+sz,   lx+sx, ly+sy, lz-sz, // top face
+            lx+sx, ly+sy, lz+sz,   lx+sx, ly+sy, lz-sz,   lx-sx, ly+sy, lz+sz,
+            lx-sx, ly-sy, lz-sz,   lx+sx, ly-sy, lz-sz,   lx-sx, ly-sy, lz+sz, // bottom face
+            lx+sx, ly-sy, lz+sz,   lx-sx, ly-sy, lz+sz,   lx+sx, ly-sy, lz-sz
+            );
+        target.norm.push(
+             0,  0, -1,    0,  0, -1,    0,  0, -1, // north face
+             0,  0, -1,    0,  0, -1,    0,  0, -1,
+             0,  0,  1,    0,  0,  1,    0,  0,  1, // south face
+             0,  0,  1,    0,  0,  1,    0,  0,  1,
+            -1,  0,  0,   -1,  0,  0,   -1,  0,  0, // west face
+            -1,  0,  0,   -1,  0,  0,   -1,  0,  0,
+             1,  0,  0,    1,  0,  0,    1,  0,  0, // east face
+             1,  0,  0,    1,  0,  0,    1,  0,  0,
+             0,  1,  0,    0,  1,  0,    0,  1,  0, // top face
+             0,  1,  0,    0,  1,  0,    0,  1,  0,
+             0, -1,  0,    0, -1,  0,    0, -1,  0, // bottom face
+             0, -1,  0,    0, -1,  0,    0, -1,  0
+            );
+        target.color.push(
+            r, g, b, a,   r, g, b, a,   r, g, b, a, // north face
+            r, g, b, a,   r, g, b, a,   r, g, b, a,
+            r, g, b, a,   r, g, b, a,   r, g, b, a, // south face
+            r, g, b, a,   r, g, b, a,   r, g, b, a,
+            r, g, b, a,   r, g, b, a,   r, g, b, a, // west face
+            r, g, b, a,   r, g, b, a,   r, g, b, a,
+            r, g, b, a,   r, g, b, a,   r, g, b, a, // east face
+            r, g, b, a,   r, g, b, a,   r, g, b, a,
+            r, g, b, a,   r, g, b, a,   r, g, b, a, // top face
+            r, g, b, a,   r, g, b, a,   r, g, b, a,
+            r, g, b, a,   r, g, b, a,   r, g, b, a, // bottom face
+            r, g, b, a,   r, g, b, a,   r, g, b, a
+            );
+        target.uv.push(
+            u1,v1, u1,v0, u0,v1,
+            u0,v1, u1,v0, u0,v0,
+            u1,v1, u1,v0, u0,v1,
+            u0,v1, u1,v0, u0,v0,
+            
+            u0,v1, u1,v1, u0,v0,
+            u0,v0, u1,v1, u1,v0,
+            u0,v1, u1,v1, u0,v0,
+            u0,v0, u1,v1, u1,v0,
+            
+            0,0, 0,0, 0,0,
+            0,0, 0,0, 0,0,
+            0,0, 0,0, 0,0,
+            0,0, 0,0, 0,0
+            );
+        target.length += 12 * 3;
+    }
+    
+    function appendQuad(target, loc, color, u, v, norm, size, texID) {
+        var x = loc[0], y = loc[1], z = loc[2];
+        var ux = u[0]*size, uy = u[1]*size, uz = u[2]*size;
+        var vx = v[0]*size, vy = v[1]*size, vz = v[2]*size;
+        
+        var x0 = x - ux - vx, y0 = y - uy - vy, z0 = z - uz - vz;
+        var x1 = x + ux - vx, y1 = y + uy - vy, z1 = z + uz - vz;
+        var x2 = x + ux + vx, y2 = y + uy + vy, z2 = z + uz + vz;
+        var x3 = x - ux + vx, y3 = y - uy + vy, z3 = z - uz + vz;
+        
+        var nx = norm[0], ny = norm[1], nz = norm[2];
+        var r = color[0], g = color[1], b = color[2], a = color[3];
+        
+        var ti = texID[0], tj = texID[1];
+        var u0 = ((ti * 64 +  0) / 64) / 8.0, v0 = ((tj * 64 +  0) / 64) / 16.0;
+        var u1 = ((ti * 64 + 63) / 64) / 8.0, v1 = ((tj * 64 + 63) / 64) / 16.0;
+        
+        target.pos.push(
+            x0, y0, z0,   x3, y3, z3,   x1, y1, z1,
+            x3, y3, z3,   x2, y2, z2,   x1, y1, z1
+            );
+        target.norm.push(
+            nx, ny, nz,   nx, ny, nz,   nx, ny, nz,
+            nx, ny, nz,   nx, ny, nz,   nx, ny, nz
+            );
+        target.color.push(
+            r,g,b,a,   r,g,b,a,   r,g,b,a,
+            r,g,b,a,   r,g,b,a,   r,g,b,a
+            );
+        target.uv.push(
+            u0,v0, u0,v1, u1,v0,
+            u0,v1, u1,v1, u1,v0
+            );
+        target.length += 6;
+    }
+    
+    function appendCylinder(target, count, color, smooth, r, y0, y1) {
+        var tarPos = target.pos;
+        var tarNorm = target.norm;
+        var tarColor = target.color;
+        var tarUV = target.uv;
+        for(var i = 0; i < count; i++)
+        {
+            var r0 = (i + 0.0) / count * Math.PI * 2.0;
+            var r1 = (i + 1.0) / count * Math.PI * 2.0;
+            var rn = (i + 0.5) / count * Math.PI * 2.0;
+            var x0 = Math.cos(r0), z0 = Math.sin(r0);
+            var x1 = Math.cos(r1), z1 = Math.sin(r1);
+            var xn = Math.cos(rn), zn = Math.sin(rn);
+            
+            // side 1/2
+            tarPos.push(x0*r, y0, z0*r);
+            if(smooth) tarNorm.push(x0,0,z0); else tarNorm.push(xn,0,zn);
+            tarColor.push(color[0], color[1], color[2], color[3]);
+            tarUV.push(0, 0);
+            
+            tarPos.push(x0*r, y1, z0*r);
+            if(smooth) tarNorm.push(x0,0,z0); else tarNorm.push(xn,0,zn);
+            tarColor.push(color[0], color[1], color[2], color[3]);
+            tarUV.push(0, 0);
+            
+            tarPos.push(x1*r, y0, z1*r);
+            if(smooth) tarNorm.push(x1,0,z1); else tarNorm.push(xn,0,zn);
+            tarColor.push(color[0], color[1], color[2], color[3]);
+            tarUV.push(0, 0);
+            
+            // side 2/2
+            tarPos.push(x0*r, y1, z0*r);
+            if(smooth) tarNorm.push(x0,0,z0); else tarNorm.push(xn,0,zn);
+            tarColor.push(color[0], color[1], color[2], color[3]);
+            tarUV.push(0, 0);
+            
+            tarPos.push(x1*r, y1, z1*r);
+            if(smooth) tarNorm.push(x1,0,z1); else tarNorm.push(xn,0,zn);
+            tarColor.push(color[0], color[1], color[2], color[3]);
+            tarUV.push(0, 0);
+            
+            tarPos.push(x1*r, y0, z1*r);
+            if(smooth) tarNorm.push(x1,0,z1); else tarNorm.push(xn,0,zn);
+            tarColor.push(color[0], color[1], color[2], color[3]);
+            tarUV.push(0, 0);
+            
+            // top
+            tarPos.push(0, y1, 0);
+            tarNorm.push(0,1,0);
+            tarColor.push(color[0], color[1], color[2], color[3]);
+            tarUV.push(0, 0);
+            
+            tarPos.push(x1*r, y1, z1*r);
+            tarNorm.push(0,1,0);
+            tarColor.push(color[0], color[1], color[2], color[3]);
+            tarUV.push(0, 0);
+            
+            tarPos.push(x0*r, y1, z0*r);
+            tarNorm.push(0,1,0);
+            tarColor.push(color[0], color[1], color[2], color[3]);
+            tarUV.push(0, 0);
+            
+            // bottom
+            tarPos.push(0, y0, 0);
+            tarNorm.push(0,-1,0);
+            tarColor.push(color[0], color[1], color[2], color[3]);
+            tarUV.push(0, 0);
+            
+            tarPos.push(x0*r, y0, z0*r);
+            tarNorm.push(0,-1,0);
+            tarColor.push(color[0], color[1], color[2], color[3]);
+            tarUV.push(0, 0);
+            
+            tarPos.push(x1*r, y0, z1*r);
+            tarNorm.push(0,-1,0);
+            tarColor.push(color[0], color[1], color[2], color[3]);
+            tarUV.push(0, 0);
+        }
+        target.length += 12 * count;
+    }
+    
+    
+    ///////////////////////////////////////////////////
+    // ui helper functions
+    
+    document.onkeydown = function(event) {
+        //keysDown[event.keyCode] = true;
+        for(key in keys) {
+            if(event.keyCode == keys[key]) {
+                keysDown[key] = true;
+                event.preventDefault();
+                event.stopPropagation();
+            }
+        }
+    }
+
+    document.onkeyup = function(event) {
+        //keysDown[event.keyCode] = false;
+        for(key in keys) keysDown[key] &= (event.keyCode != keys[key]);
+        // event.preventDefault();
+        // event.stopPropagation();
+    }
+    
+    function resize(canvas) {
+        // Lookup the size the browser is displaying the canvas.
+        var displayWidth  = canvas.clientWidth;
+        var displayHeight = canvas.clientHeight;
+        // Check if the canvas is not the same size.
+        if (canvas.width  != displayWidth || canvas.height != displayHeight) {
+            // Make the canvas the same size
+            canvas.width  = displayWidth;
+            canvas.height = displayHeight;
+        }
+    }
+    
+    if(typeof window.orientation !== 'undefined') {
+        canvas.onclick = function(event) {
+            if(!document.webkitIsFullScreen) {
+                canvas.webkitRequestFullscreen();
+            }
+        }
+        
+        canvas.ontouchstart = function(event) {
+            if(document.webkitIsFullScreen) {
+                keysDown.up = true;
+                keysDown.space = true;
+                setTimeout(function() { keysDown.space = false; }, 200);
+            }
+        }
+        canvas.onmouseup = function(event) {
+            if(document.webkitIsFullScreen) {
+                keysDown.up = false;
+            }
+        }
+        
+        // Listen for the `deviceorientation` event and handle the raw data
+        // allows us to handle mobile rendering when switching from portrait to landscape
+        window.addEventListener('deviceorientation', function(eventData) {
+            var leftright = 270 + event.alpha;
+            var updown = 90 - event.gamma;
+            if(updown > 90) {
+                updown = updown - 180;
+                leftright = leftright+180;
+            }
+            player.dir = leftright * Math.PI / 180.0;
+            player.updown = updown * Math.PI / 180.0;
+        });
+    }
+    
+    
+    
+    ///////////////////////////////////////////////////
+    // webgl helper functions
+    
+
+    function setFramebuffer(fb) {
+        if(fb === null) {
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        } else {
+            gl.bindFramebuffer(gl.FRAMEBUFFER, fb.framebuffer);
+        }
+    }
+    
+    function dataToObject(data) {
+        var obj = {
+            posBuffer: gl.createBuffer(),
+            normBuffer: gl.createBuffer(),
+            colorBuffer: gl.createBuffer(),
+            uvBuffer: gl.createBuffer(),
+            length: data.length,
+        }
+        
+        gl.bindBuffer(gl.ARRAY_BUFFER, obj.posBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data.pos), gl.STATIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER, obj.normBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data.norm), gl.STATIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER, obj.colorBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data.color), gl.STATIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER, obj.uvBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data.uv), gl.STATIC_DRAW);
+        
+        return obj;
+    }
+    
+    function createShader(gl, type, source)
+    {
+        var shader = gl.createShader(type);
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+        if(gl.getShaderParameter(shader, gl.COMPILE_STATUS))
+        {
+            return shader;
+        }
+        var msg = gl.getShaderInfoLog(shader);
+        alert('Shader Compile Error:\n' + msg);
+        gl.deleteShader(shader);
+        throw new Error('Shader compile error');
+    }
+
+    function createProgram(gl, vertexShader, fragmentShader)
+    {
+        var program = gl.createProgram();
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        gl.linkProgram(program);
+        if(gl.getProgramParameter(program, gl.LINK_STATUS))
+        {
+            return program;
+        }
+        var msg = gl.getProgramInfoLog(program);
+        alert('Shader Linker Error:\n' + msg);
+        gl.deleteProgram(program);
+        throw new Error('Shader linker error');
+    }
+
+</script>
+</html>

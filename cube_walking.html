@@ -160,10 +160,11 @@ XXXXXXXXXXXXXXXXXXX
     attribute vec3 a_pos_local;     // vert position in local space
     attribute vec3 a_norm_local;    // vert normal in local space
     attribute vec4 a_color;         // vert color
-    attribute vec2 a_uv;            // vert uv
+    attribute vec2 a_uv;            // vert uv aka texcoord
 
     varying vec4 v_color;           // vert color
     varying vec3 v_norm_world;      // vert normal wrt world
+    varying vec2 v_uv;              // vert texture coordinates
 
     void main()
     {
@@ -171,7 +172,7 @@ XXXXXXXXXXXXXXXXXXX
         vec4 pc = u_matrixV * pw;
         vec3 nw = normalize((u_matrixMit * vec4(a_norm_local, 0)).xyz);
         vec3 nc = normalize((u_matrixVit * vec4(nw,           0)).xyz);
-        
+        v_uv = a_uv;
         gl_Position  = u_matrixP * pc;
         v_color      = a_color;
         v_norm_world = a_norm_local; //(u_matrixMit * vec4(a_norm_local, 0.0)).xyz;
@@ -180,15 +181,19 @@ XXXXXXXXXXXXXXXXXXX
 
 <script type="notjs" id="fragment-shader">
     precision mediump float;
-    
+
     varying vec4 v_color;       // vert color
     varying vec3 v_norm_world;  // vert normal wrt world
+    varying vec2 v_uv;          // vert texture coordinates
+
+    uniform sampler2D u_texture;     // the texture
     
     void main()
     {
         float mult = 1.0;
         if(abs(v_norm_world.x) > 0.9) mult = 0.5;
-        gl_FragColor = vec4(v_color.rgb * mult, v_color.a);
+//        gl_FragColor = vec4(v_color.rgb * mult, v_color.a);
+        gl_FragColor = vec4((v_color.rgb * texture2D(u_texture, v_uv).rgb) * mult, v_color.a);
     }
 </script>
 
@@ -224,16 +229,13 @@ XXXXXXXXXXXXXXXXXXX
     var normLocation  = gl.getAttribLocation(program, "a_norm_local");
     var colorLocation = gl.getAttribLocation(program, "a_color");
     var uvLocation    = gl.getAttribLocation(program, "a_uv");
+    console.log(uvLocation);
     
     var matrixPLocation = gl.getUniformLocation(program, "u_matrixP");
     var matrixMLocation = gl.getUniformLocation(program, "u_matrixM");
     var matrixVLocation = gl.getUniformLocation(program, "u_matrixV");
     var matrixMitLocation = gl.getUniformLocation(program, "u_matrixMit");
     var matrixVitLocation = gl.getUniformLocation(program, "u_matrixVit");
-    
-    gl.enableVertexAttribArray(posLocation);
-    gl.enableVertexAttribArray(colorLocation);
-    gl.enableVertexAttribArray(normLocation);
     
     ///////////////////////////
     // game info
@@ -513,14 +515,56 @@ XXXXXXXXXXXXXXXXXXX
         sound.type = "audio/mpeg";
         audios.appendChild(sound);
     }
-    
-    
+
+    // Generate / Load Texture
+    var texSize = 512;
+    var numRows = 512;
+    var numCols = 512;
+
+    var myTexels = new Uint8Array(4*texSize*texSize);
+
+    for (var i = 0; i < texSize; ++i) {
+        for (var j = 0; j < texSize; ++j) {
+            var patchx = Math.floor(i/(texSize/numRows));
+            var patchy = Math.floor(j/(texSize/numCols));
+
+            var c = (patchx%2 !== patchy%2 ? 128 : 255);
+
+            myTexels[4 * i * texSize + 4 * j] = c;
+            myTexels[4 * i * texSize + 4 * j + 1] = c;
+            myTexels[4 * i * texSize + 4 * j + 2] = c;
+            myTexels[4 * i * texSize + 4 * j + 3] = 255;
+        }
+    }
+
+    // Instead of creating texture, loading it here
+    var texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+
+    gl.enableVertexAttribArray(posLocation);
+    gl.enableVertexAttribArray(colorLocation);
+    gl.enableVertexAttribArray(normLocation);
+    gl.enableVertexAttribArray(uvLocation);
+
+
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texSize, texSize, 0, gl.RGBA, gl.UNSIGNED_BYTE, myTexels);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+    gl.uniform1i(gl.getUniformLocation(program, "u_texture"), 0);
+
+
+
     ///////////////////////////////////////////
     // game update and render
     
     function renderScene(camera, useProbe, useLights, calcProbes)
     {
         gl.useProgram(program);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.uniform1i(gl.getUniformLocation(program, "texture"), 0);
         
         var ratio     = camera.width / camera.height;
         var xformP    = m4.perspective(camera.fov / ratio * Math.PI / 180.0, ratio, camera.clip[0], camera.clip[1]);
@@ -817,7 +861,7 @@ XXXXXXXXXXXXXXXXXXX
         }
         return typeOfObstacles.indexOf(t) != -1;
     }
-    
+
     function drawObject(object)
     {
         // setup position buffer
@@ -858,6 +902,7 @@ XXXXXXXXXXXXXXXXXXX
             var stride = 0;
             var offset = 0;
             gl.vertexAttribPointer(uvLocation, size, type, normalize, stride, offset);
+
         }
         
         // draw the triangles!

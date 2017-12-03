@@ -193,7 +193,8 @@ XXXXXXXXXXXXXXXXXXX
         float mult = 1.0;
         if(abs(v_norm_world.x) > 0.9) mult = 0.5;
 //        gl_FragColor = vec4(v_color.rgb * mult, v_color.a);
-        gl_FragColor = vec4((v_color.rgb * texture2D(u_texture, v_uv).rgb) * mult, v_color.a);
+//        gl_FragColor = vec4((v_color.rgb * texture2D(u_texture, v_uv).rgb) * mult, v_color.a);
+        gl_FragColor = vec4(v_color.rgb * mult, v_color.a);
     }
 </script>
 
@@ -517,6 +518,33 @@ XXXXXXXXXXXXXXXXXXX
     }
 
     // Generate / Load Texture
+
+    function loadImage(url, callback) {
+        var image = new Image();
+        image.src = url;
+        image.onload = callback;
+        return image;
+    }
+
+    function loadImages(urls, callback) {
+        var images = [];
+        var imagesToLoad = urls.length;
+
+        // Called each time an image finished loading.
+        var onImageLoad = function () {
+            --imagesToLoad;
+            // If all the images are loaded call the callback.
+            if (imagesToLoad == 0) {
+                callback(images);
+            }
+        };
+
+        for (var ii = 0; ii < imagesToLoad; ++ii) {
+            var image = loadImage(urls[ii], onImageLoad);
+            images.push(image);
+        }
+    }
+
     var texSize = 512;
     var numRows = 512;
     var numCols = 512;
@@ -537,25 +565,47 @@ XXXXXXXXXXXXXXXXXXX
         }
     }
 
-    // Instead of creating texture, loading it here
-    var texture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    var image = loadImage(["resources/grass.jpg"]);
 
-    gl.enableVertexAttribArray(posLocation);
-    gl.enableVertexAttribArray(colorLocation);
-    gl.enableVertexAttribArray(normLocation);
-    gl.enableVertexAttribArray(uvLocation);
+//    // Instead of creating texture, loading it here
+//    var texture = gl.createTexture();
+//    gl.bindTexture(gl.TEXTURE_2D, texture);
+//    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+//
+//    gl.enableVertexAttribArray(posLocation);
+//    gl.enableVertexAttribArray(colorLocation);
+//    gl.enableVertexAttribArray(normLocation);
+//    gl.enableVertexAttribArray(uvLocation);
+//
+////    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texSize, texSize, 0, gl.RGBA, gl.UNSIGNED_BYTE, myTexels);
+//
+////    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texSize, texSize, 0, gl.RGBA, gl.UNSIGNED_BYTE, image[0]);
+//
+//    gl.generateMipmap(gl.TEXTURE_2D);
+//    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_LINEAR);
+//    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+//
+//    gl.uniform1i(gl.getUniformLocation(program, "u_texture"), 0);
+//
+
+    var textures = [];
+    for (var i = 0; i < 1; ++i) {
+        var texture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texture);
 
 
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texSize, texSize, 0, gl.RGBA, gl.UNSIGNED_BYTE, myTexels);
-    gl.generateMipmap(gl.TEXTURE_2D);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        // Set the parameters so we can render any size image.
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
-    gl.uniform1i(gl.getUniformLocation(program, "u_texture"), 0);
+        // Upload the image into the texture.
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
 
-
+        // add the texture to the array of textures.
+        textures.push(texture);
+    }
 
     ///////////////////////////////////////////
     // game update and render
@@ -564,8 +614,9 @@ XXXXXXXXXXXXXXXXXXX
     {
         gl.useProgram(program);
         gl.activeTexture(gl.TEXTURE0);
-        gl.uniform1i(gl.getUniformLocation(program, "texture"), 0);
-        
+        gl.uniform1i(gl.getUniformLocation(program, "u_texture"), 0);
+        gl.bindTexture(gl.TEXTURE_2D, textures[0]);
+
         var ratio     = camera.width / camera.height;
         var xformP    = m4.perspective(camera.fov / ratio * Math.PI / 180.0, ratio, camera.clip[0], camera.clip[1]);
         // note: lookAt returns the inverse of the view xform matrix, so we need to invert

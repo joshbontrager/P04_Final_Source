@@ -190,11 +190,14 @@ XXXXXXXXXXXXXXXXXXX
     
     void main()
     {
+        vec4 tex = texture2D(u_texture, v_uv);
         float mult = 1.0;
         if(abs(v_norm_world.x) > 0.9) mult = 0.5;
+    // Load the texture and multiplies the background color
 //        gl_FragColor = vec4(v_color.rgb * mult, v_color.a);
 //        gl_FragColor = vec4((v_color.rgb * texture2D(u_texture, v_uv).rgb) * mult, v_color.a);
-        gl_FragColor = vec4(v_color.rgb * mult, v_color.a);
+        gl_FragColor = vec4(tex.rgb * mult, tex.a);
+//        gl_FragColor = vec4(v_color.rgb * mult, v_color.a);
     }
 </script>
 
@@ -205,7 +208,7 @@ XXXXXXXXXXXXXXXXXXX
     var   drawCeiling      = true;
     
     //////////////////////////////
-    // set up webgl
+    // set up webglgi
     
     var canvas = document.getElementById("c");
     var gl = canvas.getContext("webgl", {antialias:true});
@@ -565,34 +568,29 @@ XXXXXXXXXXXXXXXXXXX
         }
     }
 
-    var image = loadImage(["resources/grass.jpg"]);
+    // Instead of creating texture, loading it here
+    var texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
 
-//    // Instead of creating texture, loading it here
-//    var texture = gl.createTexture();
-//    gl.bindTexture(gl.TEXTURE_2D, texture);
-//    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-//
-//    gl.enableVertexAttribArray(posLocation);
-//    gl.enableVertexAttribArray(colorLocation);
-//    gl.enableVertexAttribArray(normLocation);
-//    gl.enableVertexAttribArray(uvLocation);
-//
-////    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texSize, texSize, 0, gl.RGBA, gl.UNSIGNED_BYTE, myTexels);
-//
-////    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texSize, texSize, 0, gl.RGBA, gl.UNSIGNED_BYTE, image[0]);
-//
-//    gl.generateMipmap(gl.TEXTURE_2D);
-//    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_LINEAR);
-//    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-//
-//    gl.uniform1i(gl.getUniformLocation(program, "u_texture"), 0);
-//
+    gl.enableVertexAttribArray(posLocation);
+    gl.enableVertexAttribArray(colorLocation);
+    gl.enableVertexAttribArray(normLocation);
+    gl.enableVertexAttribArray(uvLocation);
+
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texSize, texSize, 0, gl.RGBA, gl.UNSIGNED_BYTE, myTexels);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+    gl.uniform1i(gl.getUniformLocation(program, "u_texture"), 0);
+
 
     var textures = [];
-    for (var i = 0; i < 1; ++i) {
+    var image = loadImage("resources/wolf3dwalls.png", function() {
         var texture = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, texture);
-
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
 
         // Set the parameters so we can render any size image.
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -605,7 +603,7 @@ XXXXXXXXXXXXXXXXXXX
 
         // add the texture to the array of textures.
         textures.push(texture);
-    }
+    });
 
     ///////////////////////////////////////////
     // game update and render
@@ -615,7 +613,11 @@ XXXXXXXXXXXXXXXXXXX
         gl.useProgram(program);
         gl.activeTexture(gl.TEXTURE0);
         gl.uniform1i(gl.getUniformLocation(program, "u_texture"), 0);
-        gl.bindTexture(gl.TEXTURE_2D, textures[0]);
+        if(textures.length == 1) {
+            gl.bindTexture(gl.TEXTURE_2D, textures[0])
+        } else {
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+        }
 
         var ratio     = camera.width / camera.height;
         var xformP    = m4.perspective(camera.fov / ratio * Math.PI / 180.0, ratio, camera.clip[0], camera.clip[1]);

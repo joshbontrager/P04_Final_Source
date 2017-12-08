@@ -136,7 +136,7 @@ XXXXXXXXXXXXXXXXXXX
 <canvas id="c"></canvas>
 <div id="ui" style="display: block"><table>
     <tr><td colspan="2">arrows: move, space: open</td></tr>
-    <tr><td>option:</td><td width="120px"><input type="range" min=0 max=100 value=50 id="option" name="option"></td></tr>
+    <tr><td>ambient:</td><td width="120px"><input type="range" min=0 max=100 value=20 id="ambient" name="ambient"></td></tr>
     <tr><td>fps:</td><td width="120px"><span id="fps">-----</span></td></tr>
     <tr><td>loc:</td><td><span id="loc">-----</span></td></tr>
 </table></div>
@@ -163,7 +163,10 @@ XXXXXXXXXXXXXXXXXXX
     attribute vec2 a_uv;            // vert uv aka texcoord
 
     varying vec4 v_color;           // vert color
+    varying vec3 v_pos_world;       // vert position wrt world
     varying vec3 v_norm_world;      // vert normal wrt world
+    varying vec3 v_pos_camera;      // vert position wrt camera
+    varying vec3 v_norm_camera;     // vert normal wrt camera
     varying vec2 v_uv;              // vert texture coordinates
 
     void main()
@@ -171,41 +174,83 @@ XXXXXXXXXXXXXXXXXXX
         vec4 pw = u_matrixM * vec4(a_pos_local, 1);
         vec4 pc = u_matrixV * pw;
         vec3 nw = normalize((u_matrixMit * vec4(a_norm_local, 0)).xyz);
-        vec3 nc = normalize((u_matrixVit * vec4(nw,           0)).xyz);
+        vec3 nc = normalize((u_matrixVit * vec4(nw, 0)).xyz);
         v_uv = a_uv;
-        gl_Position  = u_matrixP * pc;
+        gl_Position   = u_matrixP * pc;
+        v_pos_world   = pw.xyz / pw.w;
+        v_norm_world  = nw;
+        v_pos_camera  = pc.xyz / pc.w;
+        v_norm_camera = nc;
         v_color      = a_color;
-        v_norm_world = a_norm_local; //(u_matrixMit * vec4(a_norm_local, 0.0)).xyz;
     }
 </script>
 
 <script type="notjs" id="fragment-shader">
     precision mediump float;
-
+    
     varying vec4 v_color;       // vert color
+    varying vec3 v_pos_world;   // vert position wrt world
     varying vec3 v_norm_world;  // vert normal wrt world
+    varying vec3 v_pos_camera;  // vert position wrt camera
+    varying vec3 v_norm_camera; // vert normal wrt camera
     varying vec2 v_uv;          // vert texture coordinates
+    
+    uniform vec3 u_camera_pos;  // position of camera wrt world
 
-    uniform sampler2D u_texture;     // the texture
+    uniform sampler2D u_texture;    // the texture
     uniform sampler2D u_bump;       // the bump map
+
+    uniform vec4 u_light_ambient;
+    uniform int  u_light_count;
+    uniform vec3 u_light_position[MAXLIGHTS];    // position of light wrt world
+    uniform vec4 u_light_color[MAXLIGHTS];       // intensity (and color) of light
 
     void main()
     {
         vec4 tex = texture2D(u_texture, v_uv);
 
-        vec4 bump = texture2D(u_bump, v_uv) * 0.5;
+        vec4 bump = texture2D(u_bump, v_uv);
         float mx = 2.0 * bump.r - 1.0;
-        float my = 2.0 * bump.y - 1.0;
-        float mz = sqrt(1.0 - mx*mx - my*my);
-        vec3 z = v_norm_world;
-        vec3 y = vec3(0.0,1.0,0.0);
-        vec3 x = cross(y, z);
-        vec3 n = x * mx + y * my + z * mz;
-//        float mult = 1.0;
-//        if(abs(n.x) > 0.9) mult = 0.5;
-        float mult = 0.5 + 0.5*abs(n.x);
-    // Load the texture and multiplies the background color
-        gl_FragColor = vec4(tex.rgb * mult, tex.a);
+        float my = 1.0 - 2.0 * bump.g;
+        float mz = sqrt(max(0.0, 1.0 - mx*mx - my*my));
+        vec3 x, y, z;
+        if(abs(v_norm_world.y) < 0.1) {
+            // wall
+            z = normalize(v_norm_world);
+            y = vec3(0.0, 1.0, 0.0);
+            x = normalize(cross(y, z));
+        } else {
+            // floor or ceiling
+            z = normalize(v_norm_world);
+            x = vec3(1.0, 0.0, 0.0);
+            y = normalize(cross(z, x));
+            x = normalize(cross(y, z));
+        }
+        vec3 n = normalize(x * mx + y * my + z * mz);
+        
+        vec3 viewdir = normalize(u_camera_pos - v_pos_world);
+        
+        vec4 L = u_light_ambient;
+        for(int i = 0; i < MAXLIGHTS; i++) {
+            if(i >= u_light_count) break;
+            vec3  ldir = normalize(u_light_position[i] - v_pos_world);
+            float dist = distance(v_pos_world, u_light_position[i]) / 2.0;
+            L += u_light_color[i] * max(0.0, dot(n, ldir)) / pow(dist, 1.5); // * max(0.0, dot(n, viewdir));
+        }
+        
+        vec4 c = tex + v_color;
+        
+        gl_FragColor = vec4(c.rgb * L.rgb * L.a, c.a);
+        
+        // testing
+        /*gl_FragColor =
+            0.00001 * vec4(abs(v_norm_world.x), abs(v_norm_world.y), abs(v_norm_world.z), 1.0) +
+            0.00001 * vec4(abs(n.x), abs(n.y), abs(n.z), 1.0) +
+            0.00001 * vec4(abs(mx), abs(my), abs(mz), 1.0) +
+            0.00001 * vec4(viewdir * length(v_pos_camera), 1.0) +
+            0.00001 * vec4(v_norm_camera, 1.0) + 
+            1.00001 * vec4(c.rgb * L.rgb * L.a, c.a);
+        */
 
     }
 </script>
@@ -213,6 +258,7 @@ XXXXXXXXXXXXXXXXXXX
 <script>
     const MAPLOAD          = "map2";
     const CHECK_COLLISIONS = true;
+    const MAXLIGHTS        = 16;
     var   drawFloor        = true;
     var   drawCeiling      = true;
     
@@ -231,8 +277,8 @@ XXXXXXXXXXXXXXXXXXX
     gl.blendEquation( gl.FUNC_ADD );
     gl.blendFunc( gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA );
     
-    var vertShaderSrc = document.getElementById("vertex-shader").text;
-    var fragShaderSrc = document.getElementById("fragment-shader").text;
+    var vertShaderSrc = document.getElementById("vertex-shader").text.replace(/MAXLIGHTS/g,MAXLIGHTS);
+    var fragShaderSrc = document.getElementById("fragment-shader").text.replace(/MAXLIGHTS/g,MAXLIGHTS);
     var vertShader = createShader(gl, gl.VERTEX_SHADER,   vertShaderSrc);
     var fragShader = createShader(gl, gl.FRAGMENT_SHADER, fragShaderSrc);
     var program = createProgram(gl, vertShader, fragShader);
@@ -242,13 +288,25 @@ XXXXXXXXXXXXXXXXXXX
     var normLocation  = gl.getAttribLocation(program, "a_norm_local");
     var colorLocation = gl.getAttribLocation(program, "a_color");
     var uvLocation    = gl.getAttribLocation(program, "a_uv");
-    console.log(uvLocation);
+    console.log(posLocation, normLocation, colorLocation, uvLocation);
     
     var matrixPLocation = gl.getUniformLocation(program, "u_matrixP");
     var matrixMLocation = gl.getUniformLocation(program, "u_matrixM");
     var matrixVLocation = gl.getUniformLocation(program, "u_matrixV");
     var matrixMitLocation = gl.getUniformLocation(program, "u_matrixMit");
     var matrixVitLocation = gl.getUniformLocation(program, "u_matrixVit");
+    
+    var cameraPosLocation = gl.getUniformLocation(program, "u_camera_pos");
+    var lightAmbientLocation = gl.getUniformLocation(program, "u_light_ambient");
+    var lightCountLocation = gl.getUniformLocation(program, "u_light_count");
+    var lightPositionLocations = [];
+    var lightColorLocations = [];
+    for(var i = 0; i < MAXLIGHTS; i++) {
+        var pos = "u_light_position[" + i + "]";
+        var col = "u_light_color[" + i + "]";
+        lightPositionLocations.push(gl.getUniformLocation(program, pos));
+        lightColorLocations.push(gl.getUniformLocation(program, col));
+    }
     
     ///////////////////////////
     // game info
@@ -282,20 +340,20 @@ XXXXXXXXXXXXXXXXXXX
     
     
     // drawable objects
-    var objectWallX    = generateCubeObject([0.40,0.40,0.40,1.00], [0,0]);
-    var objectWallX2   = generateCubeObject([0.40,0.40,0.40,1.00], [2,0]);
-    var objectWallY    = generateCubeObject([0.00,0.00,0.40,1.00], [2,2]);
-    var objectWallY2   = generateCubeObject([0.00,0.00,0.40,1.00], [0,2]);
-    var objectWallZ    = generateCubeObject([0.40,0.25,0.00,1.00], [4,3]);
-    var objectWallZ2   = generateCubeObject([0.40,0.25,0.00,1.00], [6,3]);
+    var objectWallX    = generateCubeObject([0.00,0.00,0.00,0.00], [0,0]);
+    var objectWallX2   = generateCubeObject([0.00,0.00,0.00,0.00], [2,0]);
+    var objectWallY    = generateCubeObject([0.00,0.00,0.00,0.00], [2,2]);
+    var objectWallY2   = generateCubeObject([0.00,0.00,0.00,0.00], [0,2]);
+    var objectWallZ    = generateCubeObject([0.00,0.00,0.00,0.00], [4,3]);
+    var objectWallZ2   = generateCubeObject([0.00,0.00,0.00,0.00], [6,3]);
     //var objectTree     = generateCylinderObject(8, [0.2,0.5,0.2,1.0], false, 0.2, -1.0,  0.8);
     var objectTree     = generateTreeObject(8, false);
     var objectPlate    = generateCylinderObject(8, [0.2,0.2,0.2,1.0], false, 0.4, -1.0, -0.9);
     var objectWell     = generateCylinderObject(8, [0.7,0.7,0.7,1.0], false, 1.0, -1.0, -0.2);
     var objectLight    = generateCylinderObject(8, [0.7,1.0,0.7,1.0], false, 0.2,  0.9,  1.0);
     var objectLight2   = generateLampObject(8, false);
-    var objectFloor    = generateQuadObject([0,0,0], [0.6,0.6,0.6,1.0], [1,0,0], [0,0,1], [0, 1,0], 1, [0,14]);
-    var objectCeiling  = generateQuadObject([0,0,0], [0.5,0.5,0.5,1.0], [-1,0,0], [0,0,1], [0,-1,0], 1, [0,14]);
+    var objectFloor    = generateQuadObject([0,0,0], [0.6,0.6,0.6,1.0], [ 1,0,0], [0,0, 1], [0, 1,0], 1, [0,14]);
+    var objectCeiling  = generateQuadObject([0,0,0], [0.5,0.5,0.5,1.0], [ 1,0,0], [0,0,-1], [0,-1,0], 1, [0,14]);
     var objectTreasure = generateCube2Object([0,-0.9,0],[0.1,0.1,0.1], [1.0,1.0,0.2,1.0], [0,15])
     var objectTable    = generateTableObject(8, [0.75, 0.75, 0.75, 1.0], false, 0.9, 0.6, 0.05);
     var objectTable2   = generateTable2Object(8, [0.5, 0.5, 0.1, 1.0], false, 0.9, 0.6, 0.05);
@@ -308,7 +366,7 @@ XXXXXXXXXXXXXXXXXXX
     //var objectNSDoor   = generateCube2Object([0,0,0], [0.1,1.0,1.0], [0,0,0,0], [4,7]); //[0.1,0.2,0.3,1.0]
     var objectNSDoor   = generate_doorNS();
     //var objectEWDoor   = generate_doorEW();
-    var objectEWDoor   = generateCube2Object([0,0,0], [1.0,1.0,0.1], [0.0,0.8,0.8,1.0], [4,7]); //[0.1,0.2,0.3,1.0]
+    var objectEWDoor   = generateCube2Object([0,0,0], [1.0,1.0,0.1], [0.0,0.0,0.0,0.0], [4,7]); //[0.1,0.2,0.3,1.0]
     //var objectPlant    = generate_bananaplant();
     var objectPlant    = generateCylinderObject(8, [0.2,0.5,0.2,1.0], false, 0.2, -1.0, -0.2);
     //var objectChandelier = generate_chandelier();
@@ -368,6 +426,7 @@ XXXXXXXXXXXXXXXXXXX
     // gather info about map
     var mapSize = map.length;
     var drawables = {}; // a collection of drawable objects
+    var lights = [];
     var doors = [];     // all doors
     for(var i = 0; i < map.length; i++) {
         var maprow = map[i];
@@ -397,6 +456,18 @@ XXXXXXXXXXXXXXXXXXX
                     openVal: 0.0,
                     rooms: [],
                     playSound: false,
+                });
+            }
+            
+            // lights
+            if(t in typeOfLights) {
+                var light = typeOfLights[t];
+                var h = light.h, c = light.c;
+                lights.push({
+                    loc: [pos[0], h, pos[2]],
+                    color: [c[0], c[1], c[2], c[3]],
+                    ij: [i,j],
+                    room: -1,
                 });
             }
             
@@ -494,7 +565,7 @@ XXXXXXXXXXXXXXXXXXX
         if(floodFill([ij[0]+oi,ij[1]+oj], roomID)) { roomID += 1; }
         if(floodFill([ij[0]-oi,ij[1]-oj], roomID)) { roomID += 1; }
     }
-    if(true) {
+    if(false) {
         // debug printout of room ids
         for(var i = 0; i < map.length; i++) {
             var row = map[i];
@@ -515,6 +586,9 @@ XXXXXXXXXXXXXXXXXXX
     
     for(var i = 0; i < roomID; i++) {
         roomDoors[i] = [];
+    }
+    for(var i = 0; i < lights.length; i++) {
+        lights[i].room = getRoomID(lights[i].ij);
     }
     var audios = document.getElementById('audios');
     for(var i = 0; i < doors.length; i++) {
@@ -583,8 +657,8 @@ XXXXXXXXXXXXXXXXXXX
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
 
     gl.enableVertexAttribArray(posLocation);
-    gl.enableVertexAttribArray(colorLocation);
-    gl.enableVertexAttribArray(normLocation);
+    if(colorLocation >= 0) gl.enableVertexAttribArray(colorLocation);
+    if(normLocation >= 0) gl.enableVertexAttribArray(normLocation);
     gl.enableVertexAttribArray(uvLocation);
 
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texSize, texSize, 0, gl.RGBA, gl.UNSIGNED_BYTE, myTexels);
@@ -618,14 +692,16 @@ XXXXXXXXXXXXXXXXXXX
     
     function renderScene(camera, useProbe, useLights, calcProbes)
     {
+        if(textures.length == 0) return;
         gl.useProgram(program);
-        gl.activeTexture(gl.TEXTURE0);
+        
+        var ambient = parseFloat(document.getElementById('ambient').value) / 100;
+        gl.uniform4f(lightAmbientLocation, ambient, ambient, ambient, ambient);
+        
         gl.uniform1i(gl.getUniformLocation(program, "u_texture"), 0);
-        if(textures.length == 2) {
-            gl.bindTexture(gl.TEXTURE_2D, textures[0]);
-        } else {
-            gl.bindTexture(gl.TEXTURE_2D, texture);
-        }
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, textures[0]);
+        
         // Assign bump map to sampler
         gl.activeTexture(gl.TEXTURE1);
         gl.uniform1i(gl.getUniformLocation(program, "u_bump"), 1);
@@ -652,6 +728,8 @@ XXXXXXXXXXXXXXXXXXX
         gl.uniformMatrix4fv(matrixVLocation,   false, xformV);
         gl.uniformMatrix4fv(matrixVitLocation, false, m4.transpose(xformVinv));
         
+        gl.uniform3fv(cameraPosLocation, camera.loc);
+        
         // determine visible rooms
         var visibleRooms = [];
         if(camera.ij in ijToRoomID) {
@@ -670,6 +748,17 @@ XXXXXXXXXXXXXXXXXXX
                 }
             }
         }
+        
+        // turn on lights
+        for(var i = 0, j = 0; i < lights.length && j < MAXLIGHTS; i++) {
+            var light = lights[i];
+            if(visibleRooms.indexOf(light.room) != -1) {
+                gl.uniform3fv(lightPositionLocations[j], light.loc);
+                gl.uniform4fv(lightColorLocations[j], light.color);
+                j++;
+            }
+        }
+        gl.uniform1i(lightCountLocation, j);
         
         if(drawFloor)
         {
@@ -950,13 +1039,15 @@ XXXXXXXXXXXXXXXXXXX
         }
         
         // setup color buffer
-        gl.bindBuffer(gl.ARRAY_BUFFER, object.colorBuffer);
-        var size = 4;
-        var type = gl.FLOAT;
-        var normalize = false;
-        var stride = 0;
-        var offset = 0;
-        gl.vertexAttribPointer(colorLocation, size, type, normalize, stride, offset);
+        if(colorLocation >= 0) {
+            gl.bindBuffer(gl.ARRAY_BUFFER, object.colorBuffer);
+            var size = 4;
+            var type = gl.FLOAT;
+            var normalize = false;
+            var stride = 0;
+            var offset = 0;
+            gl.vertexAttribPointer(colorLocation, size, type, normalize, stride, offset);
+        }
         
         // setup uv buffer
         if(uvLocation >= 0) {
@@ -1055,7 +1146,7 @@ XXXXXXXXXXXXXXXXXXX
         return dataToObject(data);
     }
     function generate_doorNS() {
-        var color = [0.0,0.8,0.8,1.0];
+        var color = [0.0,0.0,0.0,0.0];
         var data = { pos:[], norm:[], color:[], uv:[], length:0 };
         appendQuad(data, [-0.1,0,0], color, [0,0, 1], [0,-1,0], [-1,0,0], 1, [4,7]);
         appendQuad(data, [ 0.1,0,0], color, [0,0,-1], [0,-1,0], [ 1,0,0], 1, [4,7]);

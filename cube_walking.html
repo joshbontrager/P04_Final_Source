@@ -613,8 +613,11 @@ XXXXXXXXXXXXXXXXXXX
         audios.appendChild(sound);
     }
 
-    // Generate / Load Texture
+//
+// ========================================================================
+//
 
+    // Load an image from file
     function loadImage(url, callback) {
         var image = new Image();
         image.src = url;
@@ -622,6 +625,7 @@ XXXXXXXXXXXXXXXXXXX
         return image;
     }
 
+    // Load multiple images from file
     function loadImages(urls, callback) {
         var images = [];
         var imagesToLoad = urls.length;
@@ -641,6 +645,7 @@ XXXXXXXXXXXXXXXXXXX
         }
     }
 
+    // Generate a Checkerboard pattern
     var texSize = 512;
     var numRows = 512;
     var numCols = 512;
@@ -661,7 +666,7 @@ XXXXXXXXXXXXXXXXXXX
         }
     }
 
-    // Instead of creating texture, loading it here
+    // create Texture object
     var texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
@@ -692,7 +697,7 @@ XXXXXXXXXXXXXXXXXXX
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_LINEAR);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
-            // add the texture to the array of textures.
+            // Add the texture to the array of textures.
             textures.push(texture);
         }
     });
@@ -708,11 +713,14 @@ XXXXXXXXXXXXXXXXXXX
         var ambient = parseFloat(document.getElementById('ambient').value) / 100;
         gl.uniform4f(lightAmbientLocation, ambient, ambient, ambient, ambient);
 
+        // Tells shader which texture unit to use for each sampler
+
+        // Assign texture map to texture unit 0
         gl.uniform1i(gl.getUniformLocation(program, "u_texture"), 0);
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, textures[0]);
 
-        // Assign bump map to sampler
+        // Assign bump map to texture unit 1
         gl.activeTexture(gl.TEXTURE1);
         gl.uniform1i(gl.getUniformLocation(program, "u_bump"), 1);
         gl.bindTexture(gl.TEXTURE_2D, textures[1]);

@@ -136,7 +136,7 @@ XXXXXXXXXXXXXXXXXXX
 <canvas id="c"></canvas>
 <div id="ui" style="display: block"><table>
     <tr><td colspan="2">arrows: move, space: open</td></tr>
-    <tr><td>ambient:</td><td width="120px"><input type="range" min=0 max=100 value=100 id="ambient" name="ambient"></td></tr>
+    <tr><td>ambient:</td><td width="120px"><input type="range" min=0 max=100 value=20 id="ambient" name="ambient"></td></tr>
     <tr><td>bump:</td><td width="120px"><input type="range" min=0 max=100 value=20 id="bump" name="bump"></td></tr>
     <tr><td>parallax:</td><td width="120px"><input type="range" min=0 max=100 value=20 id="parallax" name="parallax"></td></tr>
     <tr><td>fps:</td><td width="120px"><span id="fps">-----</span></td></tr>
@@ -216,7 +216,6 @@ XXXXXXXXXXXXXXXXXXX
     void main()
     {
         vec4 front_color = texture2D(u_front, v_uv);
-        vec4 emit = texture2D(u_emit, v_uv);
         vec4 bump = texture2D(u_bump, v_uv);
         float mx = (2.0 * bump.r - 1.0) * u_slider_bump;
         float my = (1.0 - 2.0 * bump.g) * u_slider_bump;
@@ -253,9 +252,10 @@ XXXXXXXXXXXXXXXXXXX
         float off_u = d * off * dot(viewdir,-x);
         float off_v = d * off * dot(viewdir, y);
         vec4 back_color = texture2D(u_back, v_uv + vec2(off_u,off_v));
+        vec4 emit = texture2D(u_emit, v_uv + vec2(off_u,off_v));
 
-        vec4 c = vec4(front_color.a * front_color.rgb + (1.0 - front_color.a)*back_color.rgb, 1.0) + v_color;
-        gl_FragColor = vec4(c.rgb * L.rgb * L.a + u_fader*emit.rgb, c.a);
+        vec4 c = vec4(front_color.a * front_color.rgb + (1.0 - front_color.a)*(back_color.rgb), 1.0) + v_color;
+        gl_FragColor = vec4(c.rgb * L.rgb * L.a + u_fader * emit.rgb , c.a);
 
     }
 </script>
@@ -713,7 +713,7 @@ XXXXXXXXXXXXXXXXXXX
         var bumpValue = parseFloat(document.getElementById('bump').value) / 100;
         gl.uniform1f(slider_bump, bumpValue);
 
-        var parallaxValue = parseFloat(document.getElementById('parallax').value) / 10;
+        var parallaxValue = parseFloat(document.getElementById('parallax').value) / 100;
         gl.uniform1f(slider_parallax, parallaxValue);
 
         // Tells shader which texture unit to use for each sampler

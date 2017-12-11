@@ -138,6 +138,7 @@ XXXXXXXXXXXXXXXXXXX
     <tr><td colspan="2">arrows: move, space: open</td></tr>
     <tr><td>ambient:</td><td width="120px"><input type="range" min=0 max=100 value=20 id="ambient" name="ambient"></td></tr>
     <tr><td>bump:</td><td width="120px"><input type="range" min=0 max=100 value=20 id="bump" name="bump"></td></tr>
+    <tr><td>parallax:</td><td width="120px"><input type="range" min=0 max=100 value=20 id="parallax" name="parallax"></td></tr>
     <tr><td>fps:</td><td width="120px"><span id="fps">-----</span></td></tr>
     <tr><td>loc:</td><td><span id="loc">-----</span></td></tr>
 </table></div>
@@ -206,6 +207,8 @@ XXXXXXXXXXXXXXXXXXX
 
     uniform vec4 u_light_ambient;
     uniform float u_fader;          // Variable that fades in and out
+    uniform float u_slider_bump;         // Slider for bump map
+    uniform float u_slider_parallax;     // Slider for parallax intensity
     uniform int  u_light_count;
     uniform vec3 u_light_position[MAXLIGHTS];    // position of light wrt world
     uniform vec4 u_light_color[MAXLIGHTS];       // intensity (and color) of light
@@ -215,8 +218,8 @@ XXXXXXXXXXXXXXXXXXX
         vec4 front_color = texture2D(u_front, v_uv);
         vec4 emit = texture2D(u_emit, v_uv);
         vec4 bump = texture2D(u_bump, v_uv);
-        float mx = (2.0 * bump.r - 1.0) * 0.2;
-        float my = (1.0 - 2.0 * bump.g) * 0.2;
+        float mx = (2.0 * bump.r - 1.0) * u_slider_bump;
+        float my = (1.0 - 2.0 * bump.g) * u_slider_bump;
         float mz = sqrt(max(0.0, 1.0 - mx*mx - my*my));
         vec3 x, y, z;
         if(abs(v_norm_world.y) < 0.1) {
@@ -235,7 +238,6 @@ XXXXXXXXXXXXXXXXXXX
 
         vec3 viewdir = normalize(u_camera_pos - v_pos_world);
 
-
         vec4 L = u_light_ambient;
         for(int i = 0; i < MAXLIGHTS; i++) {
             if(i >= u_light_count) break;
@@ -245,15 +247,13 @@ XXXXXXXXXXXXXXXXXXX
         }
 
         //parallax uv
-        float d = 0.01;
-        float off = d * tan(acos(-dot(v_norm_world,viewdir)));
+        float d = 0.5 * u_slider_parallax;
+        float off = d * tan(acos(dot(v_norm_world,viewdir)));
         float off_u = (dot(viewdir, x)) * off;
         float off_v = (dot(viewdir, y)) * off;
         vec4 back_color = texture2D(u_back, v_uv + vec2(off_u,off_v));
 
-        // Compositing
         vec4 c = vec4(front_color.a * front_color.rgb + (1.0 - front_color.a)*back_color.rgb, 1.0) + v_color;
-
         gl_FragColor = vec4(c.rgb * L.rgb * L.a + u_fader*emit.rgb, c.a);
 
     }
@@ -303,6 +303,8 @@ XXXXXXXXXXXXXXXXXXX
     var cameraPosLocation = gl.getUniformLocation(program, "u_camera_pos");
     var lightAmbientLocation = gl.getUniformLocation(program, "u_light_ambient");
     var fader = gl.getUniformLocation(program, "u_fader");
+    var slider_bump = gl.getUniformLocation(program, "u_slider_bump");
+    var slider_parallax = gl.getUniformLocation(program, "u_slider_parallax");
     var lightCountLocation = gl.getUniformLocation(program, "u_light_count");
     var lightPositionLocations = [];
     var lightColorLocations = [];
@@ -609,6 +611,7 @@ XXXXXXXXXXXXXXXXXXX
     }
 
     ///////////////////////////////////////////
+    // Loading Textures
 
     // Load an image from file
     function loadImage(url, callback) {
@@ -678,7 +681,7 @@ XXXXXXXXXXXXXXXXXXX
 
 
     var textures = [];
-    loadImages(["resources/wolf3dwalls-parallax-front.png", "resources/wolf3dwalls-parallax-back.png", "resources/wolf3dwalls-bump.png", "resources/wolf3dwalls-emittance.png"/*,"resources/wolf3dwalls-paralax.png","resources/wolf3dwalls.png"*/], function(images) {
+    loadImages(["resources/wolf3dwalls-parallax-front.png", "resources/wolf3dwalls-parallax-back.png", "resources/wolf3dwalls-bump.png", "resources/wolf3dwalls-emittance.png"], function(images) {
         for (var i = 0; i < images.length; ++i) {
             var texture = gl.createTexture();
             gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -705,6 +708,12 @@ XXXXXXXXXXXXXXXXXXX
 
         var ambient = parseFloat(document.getElementById('ambient').value) / 100;
         gl.uniform4f(lightAmbientLocation, ambient, ambient, ambient, ambient);
+
+        var bumpValue = parseFloat(document.getElementById('bump').value) / 100;
+        gl.uniform1f(slider_bump, bumpValue);
+
+        var parallaxValue = parseFloat(document.getElementById('parallax').value) / 10;
+        gl.uniform1f(slider_parallax, parallaxValue);
 
         // Tells shader which texture unit to use for each sampler
 

@@ -105,11 +105,11 @@ X                X      XXX     Y L Y
 XXXXXXXXXXXXXXXXXX-XXXXXX       Y   Y
           XX  X  | +X      YYYYYYY-YYYYYYY
          XW|  X  X X       Ybd  Y   Y    Y
-          XX     XX        Y    | L | s  Y
+          XX     XX        Y    | L | s  y
             X-XXXX         Y    Y   Y    Y
             X  X           YYYYYY   YYYYYY
             X EX           Y    Y   Y    Y
-            XXXX           Y >  | L |d  bY
+            XXXX           Y >L | L |d  by
                            Y    Y   Y    Y
                            YYYYYY   YYYYYY
                            Y             Y
@@ -137,6 +137,7 @@ XXXXXXXXXXXXXXXXXXX
 <div id="ui" style="display: block"><table>
     <tr><td colspan="2">arrows: move, space: open</td></tr>
     <tr><td>ambient:</td><td width="120px"><input type="range" min=0 max=100 value=20 id="ambient" name="ambient"></td></tr>
+    <tr><td>bump:</td><td width="120px"><input type="range" min=0 max=100 value=20 id="bump" name="bump"></td></tr>
     <tr><td>fps:</td><td width="120px"><span id="fps">-----</span></td></tr>
     <tr><td>loc:</td><td><span id="loc">-----</span></td></tr>
 </table></div>
@@ -199,10 +200,12 @@ XXXXXXXXXXXXXXXXXXX
 
     uniform sampler2D u_texture;    // the texture 0
     uniform sampler2D u_bump;       // the bump map 1
-    uniform sampler2D u_paratop;    //top paralax texture 2
+    uniform sampler2D u_emit;       // the emit map 2
+    uniform sampler2D u_paratop;    //top parallax texture 2
     uniform sampler2D u_parabot;    //bottom parallax texture 3
 
     uniform vec4 u_light_ambient;
+    uniform float u_fader;          // Variable that fades in and out
     uniform int  u_light_count;
     uniform vec3 u_light_position[MAXLIGHTS];    // position of light wrt world
     uniform vec4 u_light_color[MAXLIGHTS];       // intensity (and color) of light
@@ -210,7 +213,7 @@ XXXXXXXXXXXXXXXXXXX
     void main()
     {
         vec4 tex = texture2D(u_texture, v_uv);
-
+        vec4 emit = texture2D(u_emit, v_uv);
         vec4 bump = texture2D(u_bump, v_uv);
         float mx = 2.0 * bump.r - 1.0;
         float my = 1.0 - 2.0 * bump.g;
@@ -248,9 +251,10 @@ XXXXXXXXXXXXXXXXXXX
         vec3 off_v = (cross(viewdir, y)) * off;
         vec4 parallax = texture2D(u_paratop, (off_u,off_v));*/
 
+        // Compositing
         vec4 c = tex + v_color;
 
-        gl_FragColor = vec4(c.rgb * L.rgb * L.a, c.a);
+        gl_FragColor = vec4(c.rgb * L.rgb * L.a, c.a) + u_fader*emit;
 
         // testing
         /*gl_FragColor =
@@ -308,6 +312,7 @@ XXXXXXXXXXXXXXXXXXX
 
     var cameraPosLocation = gl.getUniformLocation(program, "u_camera_pos");
     var lightAmbientLocation = gl.getUniformLocation(program, "u_light_ambient");
+    var fader = gl.getUniformLocation(program, "u_fader");
     var lightCountLocation = gl.getUniformLocation(program, "u_light_count");
     var lightPositionLocations = [];
     var lightColorLocations = [];
@@ -323,7 +328,7 @@ XXXXXXXXXXXXXXXXXXX
 
     // game states
     var prevTime = 0;
-    var frames = 0, prevFramesTime = 0;
+    var frames = 0, prevFramesTime = 0, intensity = 1, direction = 1;
     var keysDown = [];
     var keys = { // see http://www.asquare.net/javascript/tests/KeyCode.html
         up:    38,
@@ -613,9 +618,7 @@ XXXXXXXXXXXXXXXXXXX
         audios.appendChild(sound);
     }
 
-//
-// ========================================================================
-//
+    ///////////////////////////////////////////
 
     // Load an image from file
     function loadImage(url, callback) {
@@ -685,7 +688,7 @@ XXXXXXXXXXXXXXXXXXX
 
 
     var textures = [];
-    loadImages(["resources/wolf3dwalls.png", "resources/wolf3dwalls-bump.png"/*,"resources/wolf3dwalls-paralax.png","resources/wolf3dwalls.png"*/], function(images) {
+    loadImages(["resources/wolf3dwalls.png", "resources/wolf3dwalls-bump.png", "resources/wolf3dwalls-emittance.png"/*,"resources/wolf3dwalls-paralax.png","resources/wolf3dwalls.png"*/], function(images) {
         for (var i = 0; i < images.length; ++i) {
             var texture = gl.createTexture();
             gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -724,6 +727,11 @@ XXXXXXXXXXXXXXXXXXX
         gl.activeTexture(gl.TEXTURE1);
         gl.uniform1i(gl.getUniformLocation(program, "u_bump"), 1);
         gl.bindTexture(gl.TEXTURE_2D, textures[1]);
+
+        // Assign emittance to texture unit 2
+        gl.activeTexture(gl.TEXTURE2);
+        gl.uniform1i(gl.getUniformLocation(program, "u_emit"), 2);
+        gl.bindTexture(gl.TEXTURE_2D, textures[2]);
 
     /*    gl.activeTexture(gl.TEXTURE2);
         gl.uniform1i(gl.getUniformLocation(program, "u_paratop"), 2);
@@ -848,6 +856,14 @@ XXXXXXXXXXXXXXXXXXX
         currTime *= 0.001;
         var deltaTime = Math.min(currTime - prevTime, 0.25);
         prevTime = currTime;
+
+        if (intensity == 100 || intensity == 0) {
+            direction *= -1;
+        }
+        intensity += direction;
+        console.log(intensity);
+
+        gl.uniform1f(fader, intensity / 100);
 
         frames++;
         if(prevFramesTime == 0) prevFramesTime = currTime;

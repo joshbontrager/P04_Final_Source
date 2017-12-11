@@ -246,16 +246,20 @@ XXXXXXXXXXXXXXXXXXX
             L += u_light_color[i] * max(0.0, dot(n, ldir)) / pow(dist, 1.5); // * max(0.0, dot(n, viewdir));
         }
 
+        
         //parallax uv
         float d = 0.2 * u_slider_parallax;
-        float off = d * tan(acos(dot(viewdir, z)));
-        float off_u = d * off * dot(viewdir,-x);
-        float off_v = d * off * dot(viewdir, y);
-        vec4 back_color = texture2D(u_back, v_uv + vec2(off_u,off_v));
-        vec4 emit = texture2D(u_emit, v_uv + vec2(off_u,off_v));
+        float l = d / dot(viewdir, z);
+        vec3 p = -viewdir * l;
+        float off_u = mod(mod(mod(v_uv.x *  8.0, 1.0) + dot(x, p), 1.0) + 1.0, 1.0) /  8.0;
+        float off_v = mod(mod(mod(v_uv.y * 16.0, 1.0) + dot(y,-p), 1.0) + 1.0, 1.0) / 16.0;
+        
+        vec2 uv_back = vec2(floor(v_uv.x * 8.0) / 8.0, floor(v_uv.y * 16.0) / 16.0) + vec2(off_u,off_v);
+        vec4 emit = texture2D(u_emit, uv_back);
+        vec4 back_color = texture2D(u_back, uv_back);
 
         vec4 c = vec4(front_color.a * front_color.rgb + (1.0 - front_color.a)*(back_color.rgb), 1.0) + v_color;
-        gl_FragColor = vec4(c.rgb * L.rgb * L.a + u_fader * emit.rgb , c.a);
+        gl_FragColor = vec4(c.rgb * L.rgb * L.a + (1.0 - front_color.a)*u_fader * emit.rgb , c.a);
 
     }
 </script>
